@@ -27,48 +27,49 @@ import java.util.Map;
 import javax.jcr.Session;
 
 /**
- * The AuthorizablePostProcessService lets Jackrabbit Authorizable objects be used
- * as richer Sakai User and Group entities. Most of the additional functionality is
+ * The AuthorizablePostProcessService lets Jackrabbit Authorizable objects be used as
+ * richer Sakai User and Group entities. Most of the additional functionality is
  * contributed by AuthorizablePostProcessor services.
  */
 public interface AuthorizablePostProcessService extends BoundService {
 
   /**
-   * This method is a shortcut to process a Jacrkabbit Authorizable without passing
-   * any extra parameters.
-   *
+   * This method is a shortcut to process a Jacrkabbit Authorizable without passing any
+   * extra parameters.
+   * 
    * @param authorizable
    * @param session
    * @param change
    * @throws Exception
    */
   void process(Authorizable authorizable, Session session, ModificationType change)
-    throws Exception;
+      throws Exception;
 
   /**
-   * Do whatever's needed to make the given change to a Jackrabbit Authorizable
-   * be reflected in Sakai User and Group entities. The method should be called
-   * after creation or modification of the Authorizable but before deletion.
-   *
+   * Do whatever's needed to make the given change to a Jackrabbit Authorizable be
+   * reflected in Sakai User and Group entities. The method should be called after
+   * creation or modification of the Authorizable but before deletion.
+   * 
    * @param authorizable
    * @param session
    * @param change
-   * @param parameters a map of non-persisted parameters to be passed on for
-   * possible use by processing services
+   * @param parameters
+   *          a map of non-persisted parameters to be passed on for possible use by
+   *          processing services
    * @throws Exception
    */
-  void process(Authorizable authorizable, Session session, ModificationType change, Map<String, Object[]> parameters)
-    throws Exception;
+  void process(Authorizable authorizable, Session session, ModificationType change,
+      Map<String, Object[]> parameters) throws Exception;
 
   /**
    * Use Sling request parameters as a basis for processing.
-   *
+   * 
    * @param authorizable
    * @param session
    * @param change
    * @param request
    * @throws Exception
    */
-  void process(Authorizable authorizable, Session session, ModificationType change, SlingHttpServletRequest request)
-    throws Exception;
+  void process(Authorizable authorizable, Session session, ModificationType change,
+      SlingHttpServletRequest request) throws Exception;
 }
