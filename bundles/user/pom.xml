@@ -219,5 +219,12 @@
     	<type>bundle</type>
     	<scope>compile</scope>
     </dependency>
+    <dependency>
+    	<groupId>org.sakaiproject.nakamura</groupId>
+    	<artifactId>org.sakaiproject.nakamura.resource</artifactId>
+    	<version>0.10-SNAPSHOT</version>
+    	<type>bundle</type>
+    	<scope>provided</scope>
+    </dependency>
   </dependencies>
 </project>

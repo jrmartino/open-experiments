@@ -17,14 +17,13 @@
  */
 package org.sakaiproject.nakamura.api.user;
 
-import org.apache.jackrabbit.api.security.user.Authorizable;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.servlets.post.ModificationType;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
 import org.sakaiproject.nakamura.util.osgi.BoundService;
 
 import java.util.Map;
-
-import javax.jcr.Session;
 
 /**
  * The AuthorizablePostProcessService lets Jackrabbit Authorizable objects be used as

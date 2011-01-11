@@ -16,7 +16,6 @@
  */
 package org.sakaiproject.nakamura.user.servlet;
 
-import org.apache.jackrabbit.api.security.user.Authorizable;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.SlingHttpServletResponse;
 import org.apache.sling.api.request.RequestParameter;
@@ -26,13 +25,18 @@ import org.apache.sling.api.servlets.HtmlResponse;
 import org.apache.sling.api.servlets.SlingAllMethodsServlet;
 import org.apache.sling.api.wrappers.SlingRequestPaths;
 import org.apache.sling.commons.osgi.OsgiUtil;
-import org.apache.sling.jackrabbit.usermanager.impl.resource.AuthorizableResourceProvider;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.SlingPostConstants;
-import org.apache.sling.servlets.post.impl.helper.DateParser;
 import org.apache.sling.servlets.post.impl.helper.JSONResponse;
 import org.apache.sling.servlets.post.impl.helper.RequestProperty;
 import org.osgi.service.component.ComponentContext;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
+import org.sakaiproject.nakamura.resource.lite.servlet.post.helper.DateParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,9 +51,6 @@ import java.util.Map;
 
 import javax.jcr.PropertyType;
 import javax.jcr.RepositoryException;
-import javax.jcr.Session;
-import javax.jcr.Value;
-import javax.jcr.ValueFactory;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -81,6 +82,7 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
     Dictionary<?, ?> props = context.getProperties();
 
     dateParser = new DateParser();
+    dateParser.register(StorageClientUtils.ISO8601_JCR_PATTERN);
     String[] dateFormats = OsgiUtil.toStringArray(props.get(PROP_DATE_FORMAT));
     for (String dateFormat : dateFormats) {
       dateParser.register(dateFormat);
@@ -117,8 +119,6 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
       htmlResponse.setParentLocation(externalizePath(request, path));
     }
 
-    Session session = request.getResourceResolver().adaptTo(Session.class);
-
     final List<Modification> changes = new ArrayList<Modification>();
 
     try {
@@ -149,24 +149,12 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
           break;
         }
       }
-
-      if (session.hasPendingChanges()) {
-        session.save();
-      }
     } catch (ResourceNotFoundException rnfe) {
       htmlResponse.setStatus(HttpServletResponse.SC_NOT_FOUND, rnfe.getMessage());
     } catch (Throwable throwable) {
       log.debug("Exception while handling POST " + request.getResource().getPath()
           + " with " + getClass().getName(), throwable);
       htmlResponse.setError(throwable);
-    } finally {
-      try {
-        if (session.hasPendingChanges()) {
-          session.refresh(false);
-        }
-      } catch (RepositoryException e) {
-        log.warn("RepositoryException in finally block: {}", e.getMessage(), e);
-      }
     }
 
     // check for redirect URL if processing succeeded
@@ -489,12 +477,14 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
    * 
    * @throws RepositoryException
    *           if a repository error occurs
+   * @throws AccessDeniedException
+   * @throws StorageClientException
    * @throws ServletException
    *           if an internal error occurs
    */
   protected void writeContent(Session session, Authorizable authorizable,
       Map<String, RequestProperty> reqProperties, List<Modification> changes)
-      throws RepositoryException {
+      throws RepositoryException, StorageClientException, AccessDeniedException {
 
     for (RequestProperty prop : reqProperties.values()) {
       if (prop.hasValues()) {
@@ -503,7 +493,7 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
             || prop.getName().equals("jcr:mixinTypes")) {
           continue;
         }
-        if (authorizable.isGroup()) {
+        if (authorizable instanceof Group) {
           if (prop.getName().equals("groupId")) {
             // skip these
             continue;
@@ -535,18 +525,14 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
    *          the request property
    * @throws RepositoryException
    *           if a repository error occurs.
+   * @throws StorageClientException
+   * @throws AccessDeniedException
    */
   private void setPropertyAsIs(Session session, Authorizable parent,
-      RequestProperty prop, List<Modification> changes) throws RepositoryException {
+      RequestProperty prop, List<Modification> changes) throws RepositoryException,
+      StorageClientException, AccessDeniedException {
 
-    String parentPath;
-    if (parent.isGroup()) {
-      parentPath = AuthorizableResourceProvider.SYSTEM_USER_MANAGER_GROUP_PREFIX
-          + parent.getID();
-    } else {
-      parentPath = AuthorizableResourceProvider.SYSTEM_USER_MANAGER_USER_PREFIX
-          + parent.getID();
-    }
+    final String propPath = parent.getId() + "@" + prop.getName();
 
     // no explicit typehint
     int type = PropertyType.UNDEFINED;
@@ -561,24 +547,23 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
     String[] values = prop.getStringValues();
     if (values == null) {
       // remove property
-      boolean removedProp = removePropertyIfExists(parent, prop.getName());
-      if (removedProp) {
-        changes.add(Modification.onDeleted(parentPath + "/" + prop.getName()));
+      final String removePath = removePropertyIfExists(parent, prop.getName());
+      if (removePath != null) {
+        changes.add(Modification.onDeleted(removePath));
       }
     } else if (values.length == 0) {
       // do not create new prop here, but clear existing
-      if (parent.hasProperty(prop.getName())) {
-        Value val = session.getValueFactory().createValue("");
-        parent.setProperty(prop.getName(), val);
-        changes.add(Modification.onModified(parentPath + "/" + prop.getName()));
+      final String removePath = removePropertyIfExists(parent, prop.getName());
+      if (removePath != null) {
+        changes.add(Modification.onDeleted(removePath));
       }
     } else if (values.length == 1) {
-      boolean removedProp = removePropertyIfExists(parent, prop.getName());
+      final String removePath = removePropertyIfExists(parent, prop.getName());
       // if the provided value is the empty string, we don't have to do
       // anything.
       if (values[0].length() == 0) {
-        if (removedProp) {
-          changes.add(Modification.onDeleted(parentPath + "/" + prop.getName()));
+        if (removePath != null) {
+          changes.add(Modification.onDeleted(removePath));
         }
       } else {
         // modify property
@@ -587,61 +572,49 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
           Calendar c = dateParser.parse(values[0]);
           if (c != null) {
             if (prop.hasMultiValueTypeHint()) {
-              final Value[] array = new Value[1];
-              array[0] = session.getValueFactory().createValue(c);
+              final Object[] array = new Object[1];
+              array[0] = StorageClientUtils.toStore(c);
               parent.setProperty(prop.getName(), array);
-              changes.add(Modification.onModified(parentPath + "/" + prop.getName()));
+              changes.add(Modification.onModified(propPath));
             } else {
-              Value cVal = session.getValueFactory().createValue(c);
+              final Object cVal = StorageClientUtils.toStore(c);
               parent.setProperty(prop.getName(), cVal);
-              changes.add(Modification.onModified(parentPath + "/" + prop.getName()));
+              changes.add(Modification.onModified(propPath));
             }
             return;
           }
           // fall back to default behaviour
         }
         if (type == PropertyType.UNDEFINED) {
-          Value val = session.getValueFactory().createValue(values[0],
-              PropertyType.STRING);
+          final String val = (String) StorageClientUtils.toStore(values[0]);
           parent.setProperty(prop.getName(), val);
         } else {
           if (prop.hasMultiValueTypeHint()) {
-            final Value[] array = new Value[1];
-            array[0] = session.getValueFactory().createValue(values[0], type);
+            final String[] array = new String[1];
+            array[0] = (String) StorageClientUtils.toStore(values[0]);
             parent.setProperty(prop.getName(), array);
           } else {
-            Value val = session.getValueFactory().createValue(values[0], type);
+            final String val = (String) StorageClientUtils.toStore(values[0]);
             parent.setProperty(prop.getName(), val);
           }
         }
-        changes.add(Modification.onModified(parentPath + "/" + prop.getName()));
+        changes.add(Modification.onModified(propPath));
       }
     } else {
       removePropertyIfExists(parent, prop.getName());
       if (type == PropertyType.DATE) {
         // try conversion
-        ValueFactory valFac = session.getValueFactory();
-        Value[] c = dateParser.parse(values, valFac);
+        final Calendar[] c = dateParser.parse(values);
         if (c != null) {
-          parent.setProperty(prop.getName(), c);
-          changes.add(Modification.onModified(parentPath + "/" + prop.getName()));
+          parent.setProperty(prop.getName(), StorageClientUtils.toStore(c));
+          changes.add(Modification.onModified(propPath));
           return;
         }
         // fall back to default behaviour
       }
-
-      Value[] vals = new Value[values.length];
-      if (type == PropertyType.UNDEFINED) {
-        for (int i = 0; i < values.length; i++) {
-          vals[i] = session.getValueFactory().createValue(values[i]);
-        }
-      } else {
-        for (int i = 0; i < values.length; i++) {
-          vals[i] = session.getValueFactory().createValue(values[i], type);
-        }
-      }
-      parent.setProperty(prop.getName(), vals);
-      changes.add(Modification.onModified(parentPath + "/" + prop.getName()));
+      parent.setProperty(prop.getName(), StorageClientUtils.toStore(values));
+      changes.add(Modification.onModified(propPath));
+      return;
     }
 
   }
@@ -649,22 +622,18 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
   /**
    * Removes the property with the given name from the parent resource if it exists.
    * 
-   * @param parent
-   *          the parent resource
+   * @param authorizable
    * @param name
    *          the name of the property to remove
    * @return path of the property that was removed or <code>null</code> if it was not
    *         removed
-   * @throws RepositoryException
-   *           if a repository error occurs.
    */
-  private boolean removePropertyIfExists(Authorizable resource, String name)
-      throws RepositoryException {
-    if (resource.getProperty(name) != null) {
-      resource.removeProperty(name);
-      return true;
+  private String removePropertyIfExists(Authorizable authorizable, String name) {
+    if (authorizable.hasProperty(name)) {
+      authorizable.removeProperty(name);
+      return authorizable.getId() + "@" + name;
     }
-    return false;
+    return null;
   }
 
   // ------ These methods were copied from AbstractSlingPostOperation ------

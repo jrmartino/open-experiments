@@ -26,7 +26,6 @@ import org.apache.felix.scr.annotations.ReferencePolicy;
 import org.apache.felix.scr.annotations.ReferenceStrategy;
 import org.apache.felix.scr.annotations.References;
 import org.apache.felix.scr.annotations.Service;
-import org.apache.jackrabbit.api.security.user.Authorizable;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.request.RequestParameter;
 import org.apache.sling.api.request.RequestParameterMap;
@@ -36,9 +35,12 @@ import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
 import org.apache.sling.servlets.post.SlingPostConstants;
 import org.osgi.service.component.ComponentContext;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessService;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessor;
-import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.util.osgi.AbstractOrderedService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,8 +49,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import javax.jcr.Session;
 
 @Component(immediate = true)
 @Service(value = AuthorizablePostProcessService.class)
@@ -103,23 +103,16 @@ public class AuthorizablePostProcessServiceImpl extends
   public void process(Authorizable authorizable, Session session,
       ModificationType change, Map<String, Object[]> parameters) throws Exception {
     // Set up the Modification argument.
-    final String pathPrefix = authorizable.isGroup() ? UserConstants.SYSTEM_USER_MANAGER_GROUP_PREFIX
-                                                    : UserConstants.SYSTEM_USER_MANAGER_USER_PREFIX;
-    Modification modification = new Modification(change, pathPrefix
-        + authorizable.getID(), null);
+    final String path = authorizable.getId();
+    Modification modification = new Modification(change, path, null);
 
     if (change != ModificationType.DELETE) {
       doInternalProcessing(authorizable, session, modification, parameters);
     }
     for (AuthorizablePostProcessor processor : orderedServices) {
       processor.process(authorizable, session, modification, parameters);
-      // Allowing a dirty session to pass between post-processor components
-      // can trigger InvalidItemStateException after a Workspace.copy.
-      // TODO Check to see if this is still a problem after we upgrade to
-      // Jackrabbit 2.1.1
-      if (session.hasPendingChanges()) {
-        session.save();
-      }
+      final AuthorizableManager authorizableManager = session.getAuthorizableManager();
+      authorizableManager.updateAuthorizable(authorizable);
     }
     if (change == ModificationType.DELETE) {
       doInternalProcessing(authorizable, session, modification, parameters);
@@ -205,7 +198,7 @@ public class AuthorizablePostProcessServiceImpl extends
 
   private void doInternalProcessing(Authorizable authorizable, Session session,
       Modification change, Map<String, Object[]> parameters) throws Exception {
-    if (authorizable.isGroup()) {
+    if (authorizable instanceof Group) {
       sakaiGroupProcessor.process(authorizable, session, change, parameters);
     } else {
       sakaiUserProcessor.process(authorizable, session, change, parameters);
