@@ -100,53 +100,41 @@ import javax.servlet.http.HttpServletResponse;
  * <dd>Failure, including group already exists. HTML explains the failure.</dd>
  * </dl>
  * <h4>Example</h4>
- *
+ * 
  * <code>
  * curl -F:name=newGroupA  -Fproperty1=value1 http://localhost:8080/system/userManager/group.create.html
  * </code>
- *
+ * 
  * <h4>Notes</h4>
- *
+ * 
  * @scr.component immediate="true"
  * @scr.service interface="javax.servlet.Servlet"
  * @scr.property name="sling.servlet.resourceTypes" value="sling/groups"
  * @scr.property name="sling.servlet.methods" value="POST"
  * @scr.property name="sling.servlet.selectors" value="create"
- *
+ * 
  * @scr.property name="servlet.post.dateFormats"
  *               values.0="EEE MMM dd yyyy HH:mm:ss 'GMT'Z"
  *               values.1="yyyy-MM-dd'T'HH:mm:ss.SSSZ" values.2="yyyy-MM-dd'T'HH:mm:ss"
  *               values.3="yyyy-MM-dd" values.4="dd.MM.yyyy HH:mm:ss"
  *               values.5="dd.MM.yyyy"
- *
- *
+ * 
+ * 
  */
-@ServiceDocumentation(name="Create Group Servlet",
-    description="Creates a new group. Maps on to nodes of resourceType sling/groups like " +
-    		"/rep:system/rep:userManager/rep:groups mapped to a resource url " +
-    		"/system/userManager/group. This servlet responds at /system/userManager/group.create.html",
-    shortDescription="Creates a new group",
-    bindings=@ServiceBinding(type=BindingType.PATH,bindings="/system/userManager/group.create.html",
-        selectors=@ServiceSelector(name="create", description="Creates a new group"),
-        extensions=@ServiceExtension(name="html", description="Posts produce html containing the update status")),
-    methods=@ServiceMethod(name="POST",
-        description={"Creates a new group with a name :name, " +
-            "storing additional parameters as properties of the new group.",
-            "Example<br>" +
-            "<pre>curl -F:name=g-groupname -Fproperty1=value1 http://localhost:8080/system/userManager/group.create.html</pre>"},
-        parameters={
-        @ServiceParameter(name=":name", description="The name of the new group (required)"),
-        @ServiceParameter(name="",description="Additional parameters become group node properties, " +
-            "except for parameters starting with ':', which are only forwarded to post-processors (optional)")
-        },
-        response={
-        @ServiceResponse(code=200,description="Success, a redirect is sent to the groups resource locator with HTML describing status."),
-        @ServiceResponse(code=500,description="Failure, including group already exists. HTML explains failure.")
-        }))
-
+@ServiceDocumentation(name = "Create Group Servlet", description = "Creates a new group. Maps on to nodes of resourceType sling/groups like "
+    + "/rep:system/rep:userManager/rep:groups mapped to a resource url "
+    + "/system/userManager/group. This servlet responds at /system/userManager/group.create.html", shortDescription = "Creates a new group", bindings = @ServiceBinding(type = BindingType.PATH, bindings = "/system/userManager/group.create.html", selectors = @ServiceSelector(name = "create", description = "Creates a new group"), extensions = @ServiceExtension(name = "html", description = "Posts produce html containing the update status")), methods = @ServiceMethod(name = "POST", description = {
+    "Creates a new group with a name :name, "
+        + "storing additional parameters as properties of the new group.",
+    "Example<br>"
+        + "<pre>curl -F:name=g-groupname -Fproperty1=value1 http://localhost:8080/system/userManager/group.create.html</pre>" }, parameters = {
+    @ServiceParameter(name = ":name", description = "The name of the new group (required)"),
+    @ServiceParameter(name = "", description = "Additional parameters become group node properties, "
+        + "except for parameters starting with ':', which are only forwarded to post-processors (optional)") }, response = {
+    @ServiceResponse(code = 200, description = "Success, a redirect is sent to the groups resource locator with HTML describing status."),
+    @ServiceResponse(code = 500, description = "Failure, including group already exists. HTML explains failure.") }))
 public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet implements
     ManagedService {
-
 
   /**
    *
@@ -158,61 +146,58 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
 
   /**
    * The JCR Repository we access to resolve resources
-   *
+   * 
    * @scr.reference
    */
   protected transient SlingRepository repository;
 
   /**
    * Used to launch OSGi events.
-   *
+   * 
    * @scr.reference
    */
   protected transient EventAdmin eventAdmin;
 
   /**
    * Used to create the group.
-   *
+   * 
    * @scr.reference
    */
   protected transient AuthorizablePostProcessService postProcessorService;
 
   /**
-   *
+   * 
    * @scr.property value="authenticated,everyone" type="String"
    *               name="Groups who are allowed to create other groups" description=
    *               "A comma separated list of groups who area allowed to create other groups"
    */
   public static final String GROUP_AUTHORISED_TOCREATE = "groups.authorized.tocreate";
 
-  private String[] authorizedGroups = {"authenticated"};
-
+  private String[] authorizedGroups = { "authenticated" };
 
   /*
    * (non-Javadoc)
-   *
+   * 
    * @seeorg.apache.sling.jackrabbit.usermanager.post.AbstractAuthorizablePostServlet#
    * handleOperation(org.apache.sling.api.SlingHttpServletRequest,
    * org.apache.sling.api.servlets.HtmlResponse, java.util.List)
    */
   @Override
-  @edu.umd.cs.findbugs.annotations.SuppressWarnings(justification="If there is an exception, the user is certainly not admin", value={"REC_CATCH_EXCEPTION"})
-
-  protected void handleOperation(SlingHttpServletRequest request,
-      HtmlResponse response, List<Modification> changes)
-      throws RepositoryException {
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(justification = "If there is an exception, the user is certainly not admin", value = { "REC_CATCH_EXCEPTION" })
+  protected void handleOperation(SlingHttpServletRequest request, HtmlResponse response,
+      List<Modification> changes) throws RepositoryException {
 
     // KERN-432 dont allow anon users to access create group.
-    if ( SecurityConstants.ANONYMOUS_ID.equals(request.getRemoteUser()) ) {
+    if (SecurityConstants.ANONYMOUS_ID.equals(request.getRemoteUser())) {
       response.setStatus(403, "AccessDenied");
       return;
     }
 
-        // check that the submitted parameter values have valid values.
-        final String principalName = request.getParameter(SlingPostConstants.RP_NODE_NAME);
-        if (principalName == null) {
-            throw new RepositoryException("Group name was not submitted");
-        }
+    // check that the submitted parameter values have valid values.
+    final String principalName = request.getParameter(SlingPostConstants.RP_NODE_NAME);
+    if (principalName == null) {
+      throw new RepositoryException("Group name was not submitted");
+    }
 
     NameSanitizer san = new NameSanitizer(principalName, false);
     san.validate();
@@ -229,8 +214,8 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
         LOGGER.debug("User is an admin ");
         allowCreateGroup = true;
       } else {
-        LOGGER.debug("Checking for membership of one of {} ", Arrays
-            .toString(authorizedGroups));
+        LOGGER.debug("Checking for membership of one of {} ",
+            Arrays.toString(authorizedGroups));
         PrincipalManager principalManager = AccessControlUtil
             .getPrincipalManager(currentSession);
         PrincipalIterator pi = principalManager.getGroupMembership(principalManager
@@ -279,83 +264,82 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
 
     Session session = getSession();
 
+    try {
+      UserManager userManager = AccessControlUtil.getUserManager(session);
+      Authorizable authorizable = userManager.getAuthorizable(principalName);
+
+      if (authorizable != null) {
+        // principal already exists!
+        response.setStatus(400, "A principal already exists with the requested name: "
+            + principalName);
+        return;
+      } else {
+        Group group = userManager.createGroup(new Principal() {
+          public String getName() {
+            return principalName;
+          }
+        });
+        String groupPath = AuthorizableResourceProvider.SYSTEM_USER_MANAGER_GROUP_PREFIX
+            + group.getID();
+        Map<String, RequestProperty> reqProperties = collectContent(request, response,
+            groupPath);
+
+        response.setPath(groupPath);
+        response.setLocation(externalizePath(request, groupPath));
+        response.setParentLocation(externalizePath(request,
+            AuthorizableResourceProvider.SYSTEM_USER_MANAGER_GROUP_PATH));
+        changes.add(Modification.onCreated(groupPath));
+
+        // It is not allowed to touch the rep:group-managers property directly.
+        String key = SYSTEM_USER_MANAGER_GROUP_PREFIX + principalName + "/";
+        reqProperties.remove(key + PROP_GROUP_MANAGERS);
+        reqProperties.remove(key + PROP_GROUP_VIEWERS);
+
+        // write content from form
+        writeContent(session, group, reqProperties, changes);
+
+        // update the group memberships, although this uses session from the request, it
+        // only
+        // does so for finding authorizables, so its ok that we are using an admin session
+        // here.
+        updateGroupMembership(request, group, changes);
+        // TODO We should probably let the client decide whether the
+        // current user belongs in the managers list or not.
+        updateOwnership(request, group, new String[] { currentUser.getID() }, changes);
+
         try {
-            UserManager userManager = AccessControlUtil.getUserManager(session);
-            Authorizable authorizable = userManager.getAuthorizable(principalName);
-
-            if (authorizable != null) {
-                // principal already exists!
-              response.setStatus(400,
-                  "A principal already exists with the requested name: " + principalName);
-              return;
-            } else {
-                Group group = userManager.createGroup(new Principal() {
-                  public String getName() {
-                      return principalName;
-                  }
-                });
-                String groupPath = AuthorizableResourceProvider.SYSTEM_USER_MANAGER_GROUP_PREFIX
-                   + group.getID();
-                Map<String, RequestProperty> reqProperties = collectContent(
-                    request, response, groupPath);
-
-                response.setPath(groupPath);
-                response.setLocation(externalizePath(request, groupPath));
-                response.setParentLocation(externalizePath(request,
-                    AuthorizableResourceProvider.SYSTEM_USER_MANAGER_GROUP_PATH));
-                changes.add(Modification.onCreated(groupPath));
-
-                // It is not allowed to touch the rep:group-managers property directly.
-                String key = SYSTEM_USER_MANAGER_GROUP_PREFIX + principalName + "/";
-                reqProperties.remove(key + PROP_GROUP_MANAGERS);
-                reqProperties.remove(key + PROP_GROUP_VIEWERS);
-
-                // write content from form
-                writeContent(session, group, reqProperties, changes);
-
-                // update the group memberships, although this uses session from the request, it
-                // only
-                // does so for finding authorizables, so its ok that we are using an admin session
-                // here.
-                updateGroupMembership(request, group, changes);
-                // TODO We should probably let the client decide whether the
-                // current user belongs in the managers list or not.
-                updateOwnership(request, group, new String[] {currentUser.getID()}, changes);
-
-                try {
-                  postProcessorService.process(group, session, ModificationType.CREATE, request);
-                } catch (RepositoryException e) {
-                  LOGGER.info("Failed to create Group  {}",e.getMessage());
-                  response.setStatus(HttpServletResponse.SC_CONFLICT, e.getMessage());
-                  return;
-                } catch (Exception e) {
-                  LOGGER.warn(e.getMessage(), e);
-                  response
-                     .setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
-                  return;
-                }
-
-                // Launch an OSGi event for creating a group.
-                try {
-                  Dictionary<String, String> properties = new Hashtable<String, String>();
-                  properties.put(UserConstants.EVENT_PROP_USERID, principalName);
-                  EventUtils
-                      .sendOsgiEvent(properties, UserConstants.TOPIC_GROUP_CREATED, eventAdmin);
-                } catch (Exception e) {
-                  // Trap all exception so we don't disrupt the normal behaviour.
-                  LOGGER.error("Failed to launch an OSGi event for creating a user.", e);
-                }
-            }
-        } catch (RepositoryException re) {
-          LOGGER.info("Failed to create Group  {}",re.getMessage());
-          LOGGER.debug("Failed to create Group Cause {}",re,re.getMessage());
-          response.setStatus(HttpServletResponse.SC_CONFLICT, re.getMessage());
+          postProcessorService.process(group, session, ModificationType.CREATE, request);
+        } catch (RepositoryException e) {
+          LOGGER.info("Failed to create Group  {}", e.getMessage());
+          response.setStatus(HttpServletResponse.SC_CONFLICT, e.getMessage());
           return;
-        } finally {
-            ungetSession(session);
+        } catch (Exception e) {
+          LOGGER.warn(e.getMessage(), e);
+          response
+              .setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
+          return;
         }
-  }
 
+        // Launch an OSGi event for creating a group.
+        try {
+          Dictionary<String, String> properties = new Hashtable<String, String>();
+          properties.put(UserConstants.EVENT_PROP_USERID, principalName);
+          EventUtils.sendOsgiEvent(properties, UserConstants.TOPIC_GROUP_CREATED,
+              eventAdmin);
+        } catch (Exception e) {
+          // Trap all exception so we don't disrupt the normal behaviour.
+          LOGGER.error("Failed to launch an OSGi event for creating a user.", e);
+        }
+      }
+    } catch (RepositoryException re) {
+      LOGGER.info("Failed to create Group  {}", re.getMessage());
+      LOGGER.debug("Failed to create Group Cause {}", re, re.getMessage());
+      response.setStatus(HttpServletResponse.SC_CONFLICT, re.getMessage());
+      return;
+    } finally {
+      ungetSession(session);
+    }
+  }
 
   /** Returns the JCR repository used by this service. */
   @Override
@@ -387,7 +371,7 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
 
   /**
    * Activates this component.
-   *
+   * 
    * @param componentContext
    *          The OSGi <code>ComponentContext</code> of this component.
    */
@@ -403,7 +387,7 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
 
   /**
    * {@inheritDoc}
-   *
+   * 
    * @see org.osgi.service.cm.ManagedService#updated(java.util.Dictionary)
    */
   @SuppressWarnings("rawtypes")
