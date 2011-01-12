@@ -73,7 +73,7 @@ public class AbstractSakaiGroupPostServletTest {
   private UserManager adminUserManager;
   @Mock
   private SlingRepository repository;
-  
+
   private AbstractSakaiGroupPostServlet servlet;
 
   @Before
@@ -143,7 +143,7 @@ public class AbstractSakaiGroupPostServletTest {
     assertTrue(values.contains("jack"));
     assertEquals(1, values.size());
   }
-  
+
   @Test
   public void testNonJoinableGroup() throws Exception {
     when(group.isGroup()).thenReturn(true);
@@ -153,28 +153,26 @@ public class AbstractSakaiGroupPostServletTest {
     when(joinable.getString()).thenReturn("no");
     joinableArray[0] = joinable;
     when(group.getProperty(UserConstants.PROP_JOINABLE_GROUP)).thenReturn(joinableArray);
-    
+
     when(request.getRemoteUser()).thenReturn("abc");
     when(jrSession.getUserID()).thenReturn("abc");
     when(resourceResolver.adaptTo(Session.class)).thenReturn(jrSession);
     when(jrSession.getUserManager()).thenReturn(userManager);
-    when(request.getParameterValues(":member")).thenReturn(
-        new String[] { "abc" });
+    when(request.getParameterValues(":member")).thenReturn(new String[] { "abc" });
     when(userAuth.getID()).thenReturn("abc");
     when(userManager.getAuthorizable("abc")).thenReturn(userAuth);
-    
+
     when(group.addMember(userAuth)).thenThrow(new RepositoryException());
-    
-    
+
     ArrayList<Modification> changes = new ArrayList<Modification>();
-    try{
+    try {
       servlet.updateGroupMembership(request, group, changes);
-    }catch (RepositoryException e) {
-      
+    } catch (RepositoryException e) {
+
     }
     assertTrue(changes.size() == 0);
   }
-  
+
   @Test
   public void testJoinableGroup() throws Exception {
     when(group.isGroup()).thenReturn(true);
@@ -185,29 +183,27 @@ public class AbstractSakaiGroupPostServletTest {
     when(joinable.getString()).thenReturn("yes");
     joinableArray[0] = joinable;
     when(group.getProperty(UserConstants.PROP_JOINABLE_GROUP)).thenReturn(joinableArray);
-    
+
     when(request.getRemoteUser()).thenReturn("abc");
     when(jrSession.getUserID()).thenReturn("abc");
     when(resourceResolver.adaptTo(Session.class)).thenReturn(jrSession);
     when(jrSession.getUserManager()).thenReturn(userManager);
-    when(request.getParameterValues(":member")).thenReturn(
-        new String[] { "abc" });
+    when(request.getParameterValues(":member")).thenReturn(new String[] { "abc" });
     when(userAuth.getID()).thenReturn("abc");
     when(userManager.getAuthorizable("abc")).thenReturn(userAuth);
-    
-    servlet.repository = repository;  
+
+    servlet.repository = repository;
     when(adminSession.getUserManager()).thenReturn(adminUserManager);
     when(repository.loginAdministrative(null)).thenReturn(adminSession);
     when(adminUserManager.getAuthorizable("g-foo")).thenReturn(group);
     when(group.addMember(userAuth)).thenReturn(true);
-    
-    
+
     adminSession.logout();
-    
+
     ArrayList<Modification> changes = new ArrayList<Modification>();
-    
+
     servlet.updateGroupMembership(request, group, changes);
-    
+
     assertTrue(changes.size() > 0);
   }
 
