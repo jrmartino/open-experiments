@@ -30,23 +30,33 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import org.apache.jackrabbit.api.JackrabbitSession;
-import org.apache.jackrabbit.api.security.user.Group;
-import org.apache.jackrabbit.api.security.user.User;
+import com.google.common.collect.ImmutableMap;
+
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.request.RequestParameter;
 import org.apache.sling.api.request.RequestParameterMap;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.runners.MockitoJUnitRunner;
+import org.sakaiproject.nakamura.api.lite.ClientPoolException;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
+import org.sakaiproject.nakamura.api.lite.authorizable.User;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessor;
 import org.sakaiproject.nakamura.api.user.UserConstants;
+import org.sakaiproject.nakamura.lite.BaseMemoryRepository;
+import org.sakaiproject.nakamura.lite.RepositoryImpl;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -55,16 +65,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
-import javax.jcr.RepositoryException;
-
 @RunWith(MockitoJUnitRunner.class)
 public class AuthorizablePostProcessorServiceTest {
+  private static final String GROUP_ID = "faculty";
+  private static final String USER_ID = "joe";
   private AuthorizablePostProcessServiceImpl authorizablePostProcessService;
-  @Mock
-  private JackrabbitSession session;
-  @Mock
+  private Session session;
   private User user;
-  @Mock
   private Group group;
   @Mock
   SlingHttpServletRequest request;
@@ -74,18 +81,32 @@ public class AuthorizablePostProcessorServiceTest {
   SakaiUserProcessor sakaiUserProcessor;
   @Mock
   SakaiGroupProcessor sakaiGroupProcessor;
+  private RepositoryImpl repository;
 
+  @BeforeClass
+  public void setUpClass() throws ClientPoolException, StorageClientException, AccessDeniedException, ClassNotFoundException {
+    BaseMemoryRepository baseMemoryRepository = new BaseMemoryRepository();
+    repository = baseMemoryRepository.getRepository();
+    session = repository.loginAdministrative();
+    AuthorizableManager authorizableManager = session.getAuthorizableManager();
+    authorizableManager.createUser(USER_ID, "Lance Speelmon", "password",
+        ImmutableMap.of("x", (Object) "y"));
+    user = (User) authorizableManager.findAuthorizable(USER_ID);
+    authorizableManager.createGroup(GROUP_ID, "Faculty", ImmutableMap.of("x", (Object) "y"));
+    group = (Group) authorizableManager.findAuthorizable(GROUP_ID);
+  }
+  
+  @AfterClass
+  public void tearDown() throws ClientPoolException {
+    session.logout();
+  }
 
   @Before
-  public void setUp() throws RepositoryException {
+  public void setUp() throws ClientPoolException, StorageClientException, AccessDeniedException, ClassNotFoundException {
     authorizablePostProcessService = new AuthorizablePostProcessServiceImpl();
     authorizablePostProcessService.sakaiUserProcessor = sakaiUserProcessor;
     authorizablePostProcessService.sakaiGroupProcessor = sakaiGroupProcessor;
     authorizablePostProcessService.bindAuthorizablePostProcessor(authorizablePostProcessor, new HashMap<String, Object>());
-    when(user.isGroup()).thenReturn(false);
-    when(user.getID()).thenReturn("joe");
-    when(group.isGroup()).thenReturn(true);
-    when(group.getID()).thenReturn("faculty");
   }
 
   @SuppressWarnings("unchecked")
@@ -100,6 +121,7 @@ public class AuthorizablePostProcessorServiceTest {
     when(requestParameterMap.getValues(anyString())).thenReturn(new RequestParameter[] {requestParameter});
     when(request.getRequestParameterMap()).thenReturn(requestParameterMap);
 
+    @SuppressWarnings("rawtypes")
     ArgumentCaptor<Map> mapArgument = ArgumentCaptor.forClass(Map.class);
     authorizablePostProcessService.process(user, session, ModificationType.MODIFY, request);
     verify(authorizablePostProcessor).process(eq(user), eq(session), any(Modification.class), mapArgument.capture());
@@ -110,6 +132,7 @@ public class AuthorizablePostProcessorServiceTest {
   @SuppressWarnings("unchecked")
   @Test
   public void parametersAreOptional() throws Exception {
+    @SuppressWarnings("rawtypes")
     ArgumentCaptor<Map> mapArgument = ArgumentCaptor.forClass(Map.class);
     authorizablePostProcessService.process(user, session, ModificationType.MODIFY);
     verify(authorizablePostProcessor).process(eq(user), eq(session), any(Modification.class), mapArgument.capture());
@@ -151,7 +174,7 @@ public class AuthorizablePostProcessorServiceTest {
     verify(authorizablePostProcessor).process(eq(user), eq(session), modificationArgument.capture(), any(Map.class));
     Modification modification = modificationArgument.getValue();
     assertEquals(ModificationType.CREATE, modification.getType());
-    assertEquals(UserConstants.SYSTEM_USER_MANAGER_USER_PREFIX + "joe", modification.getSource());
+    assertEquals(UserConstants.SYSTEM_USER_MANAGER_USER_PREFIX + USER_ID, modification.getSource());
   }
 
   @SuppressWarnings("unchecked")
@@ -162,6 +185,6 @@ public class AuthorizablePostProcessorServiceTest {
     verify(authorizablePostProcessor).process(eq(group), eq(session), modificationArgument.capture(), any(Map.class));
     Modification modification = modificationArgument.getValue();
     assertEquals(ModificationType.CREATE, modification.getType());
-    assertEquals(UserConstants.SYSTEM_USER_MANAGER_GROUP_PREFIX + "faculty", modification.getSource());
+    assertEquals(UserConstants.SYSTEM_USER_MANAGER_GROUP_PREFIX + GROUP_ID, modification.getSource());
   }
 }
