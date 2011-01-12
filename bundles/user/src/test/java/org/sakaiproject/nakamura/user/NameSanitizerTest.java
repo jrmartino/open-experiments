@@ -21,7 +21,7 @@ import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
-import javax.jcr.RepositoryException;
+import javax.servlet.ServletException;
 
 public class NameSanitizerTest {
 
@@ -65,7 +65,7 @@ public class NameSanitizerTest {
     try {
       san.validate();
       return true;
-    } catch (RepositoryException e) {
+    } catch (ServletException e) {
       return false;
     }
   }

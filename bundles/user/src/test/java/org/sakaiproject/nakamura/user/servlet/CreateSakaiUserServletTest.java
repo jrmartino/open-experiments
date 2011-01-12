@@ -4,9 +4,8 @@ import static org.easymock.EasyMock.expect;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import org.apache.jackrabbit.api.JackrabbitSession;
-import org.apache.jackrabbit.api.security.user.User;
-import org.apache.jackrabbit.api.security.user.UserManager;
+import com.google.common.collect.ImmutableMap;
+
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.api.servlets.HtmlResponse;
@@ -15,15 +14,22 @@ import org.junit.Before;
 import org.junit.Test;
 import org.sakaiproject.nakamura.api.auth.trusted.RequestTrustValidator;
 import org.sakaiproject.nakamura.api.auth.trusted.RequestTrustValidatorService;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
+import org.sakaiproject.nakamura.lite.BaseMemoryRepository;
+import org.sakaiproject.nakamura.lite.RepositoryImpl;
 import org.sakaiproject.nakamura.testutils.easymock.AbstractEasyMockTest;
 
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 
 public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
 
+  private static final String USER_ID = "userID";
   private RequestTrustValidatorService requestTrustValidatorService;
+  private RepositoryImpl repository;
 
   @Before
   public void setUp() throws Exception {
@@ -44,36 +50,39 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
         };
       }
     };
+    BaseMemoryRepository baseMemoryRepository = new BaseMemoryRepository();
+    repository = baseMemoryRepository.getRepository();
+    Session session = repository.loginAdministrative();
+    AuthorizableManager authorizableManager = session.getAuthorizableManager();
+    authorizableManager.createUser(USER_ID, "Lance Speelmon", "password",
+        ImmutableMap.of("x", (Object) "y"));
+    session.logout();
   }
 
   @Test
-  public void testNoPrincipalName() throws RepositoryException {
+  public void testNoPrincipalName() throws ServletException, StorageClientException,
+      AccessDeniedException {
     badNodeNameParam(null, "User name was not submitted");
   }
 
   @Test
-  public void testBadPrefix() throws RepositoryException {
+  public void testBadPrefix() throws ServletException, StorageClientException,
+      AccessDeniedException {
     badNodeNameParam("g-contacts-all", "'g-contacts-' is a reserved prefix.");
   }
 
-  private void badNodeNameParam(String name, String exception) throws RepositoryException {
+  private void badNodeNameParam(String name, String exception) throws ServletException,
+      StorageClientException, AccessDeniedException {
     CreateSakaiUserServlet csus = new CreateSakaiUserServlet();
     csus.requestTrustValidatorService = requestTrustValidatorService;
 
-    JackrabbitSession session = createMock(JackrabbitSession.class);
+    Session session = repository.loginAdministrative(USER_ID);
 
     ResourceResolver rr = createMock(ResourceResolver.class);
 
     SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    UserManager userManager = createMock(UserManager.class);
-    User user = createMock(User.class);
     expect(request.getResourceResolver()).andReturn(rr).anyTimes();
     expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
-
-    expect(session.getUserManager()).andReturn(userManager);
-    expect(session.getUserID()).andReturn("userID");
-    expect(userManager.getAuthorizable("userID")).andReturn(user);
-    expect(user.isAdmin()).andReturn(false);
 
     expect(request.getParameter(":create-auth")).andReturn("reCAPTCHA");
     expect(request.getParameter(SlingPostConstants.RP_NODE_NAME)).andReturn(name);
@@ -85,32 +94,26 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
     try {
       csus.handleOperation(request, response, null);
       fail();
-    } catch (RepositoryException e) {
+    } catch (ServletException e) {
       assertEquals(exception, e.getMessage());
     }
     verify();
   }
 
   @Test
-  public void testNoPwd() throws RepositoryException {
+  public void testNoPwd() throws ServletException, StorageClientException,
+      AccessDeniedException {
     CreateSakaiUserServlet csus = new CreateSakaiUserServlet();
     csus.requestTrustValidatorService = requestTrustValidatorService;
 
-    JackrabbitSession session = createMock(JackrabbitSession.class);
+    Session session = repository.loginAdministrative(USER_ID);
 
     ResourceResolver rr = createMock(ResourceResolver.class);
     expect(rr.adaptTo(Session.class)).andReturn(session);
 
     SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    UserManager userManager = createMock(UserManager.class);
-    User user = createMock(User.class);
     expect(request.getResourceResolver()).andReturn(rr).anyTimes();
     expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
-
-    expect(session.getUserManager()).andReturn(userManager);
-    expect(session.getUserID()).andReturn("userID");
-    expect(userManager.getAuthorizable("userID")).andReturn(user);
-    expect(user.isAdmin()).andReturn(false);
 
     expect(request.getParameter(":create-auth")).andReturn("reCAPTCHA");
 
@@ -124,32 +127,26 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
     try {
       csus.handleOperation(request, response, null);
       fail();
-    } catch (RepositoryException e) {
+    } catch (ServletException e) {
       assertEquals("Password was not submitted", e.getMessage());
     }
     verify();
   }
 
   @Test
-  public void testNotPwdEqualsPwdConfirm() throws RepositoryException {
+  public void testNotPwdEqualsPwdConfirm() throws ServletException,
+      StorageClientException, AccessDeniedException {
     CreateSakaiUserServlet csus = new CreateSakaiUserServlet();
     csus.requestTrustValidatorService = requestTrustValidatorService;
 
-    JackrabbitSession session = createMock(JackrabbitSession.class);
+    Session session = repository.loginAdministrative(USER_ID);
 
     ResourceResolver rr = createMock(ResourceResolver.class);
     expect(rr.adaptTo(Session.class)).andReturn(session);
 
     SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    UserManager userManager = createMock(UserManager.class);
-    User user = createMock(User.class);
     expect(request.getResourceResolver()).andReturn(rr).anyTimes();
     expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
-
-    expect(session.getUserManager()).andReturn(userManager);
-    expect(session.getUserID()).andReturn("userID");
-    expect(userManager.getAuthorizable("userID")).andReturn(user);
-    expect(user.isAdmin()).andReturn(false);
 
     expect(request.getParameter(":create-auth")).andReturn("reCAPTCHA");
 
@@ -164,7 +161,7 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
     try {
       csus.handleOperation(request, response, null);
       fail();
-    } catch (RepositoryException e) {
+    } catch (ServletException e) {
       assertEquals("Password value does not match the confirmation password",
           e.getMessage());
     }
@@ -172,24 +169,18 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
   }
 
   @Test
-  public void testRequestTrusted() throws RepositoryException {
+  public void testRequestTrusted() throws ServletException, StorageClientException,
+      AccessDeniedException {
     CreateSakaiUserServlet csus = new CreateSakaiUserServlet();
 
-    JackrabbitSession session = createMock(JackrabbitSession.class);
+    Session session = repository.loginAdministrative(USER_ID);
 
     ResourceResolver rr = createMock(ResourceResolver.class);
     expect(rr.adaptTo(Session.class)).andReturn(session);
 
     SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    UserManager userManager = createMock(UserManager.class);
-    User user = createMock(User.class);
     expect(request.getResourceResolver()).andReturn(rr).anyTimes();
     expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
-
-    expect(session.getUserManager()).andReturn(userManager);
-    expect(session.getUserID()).andReturn("userID");
-    expect(userManager.getAuthorizable("userID")).andReturn(user);
-    expect(user.isAdmin()).andReturn(false);
 
     expect(request.getParameter(":create-auth")).andReturn("typeA");
     RequestTrustValidatorService requestTrustValidatorService = createMock(RequestTrustValidatorService.class);
@@ -211,7 +202,7 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
     try {
       csus.handleOperation(request, response, null);
       fail();
-    } catch (RepositoryException e) {
+    } catch (ServletException e) {
       assertEquals("Password value does not match the confirmation password",
           e.getMessage());
     }
