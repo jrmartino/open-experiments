@@ -41,6 +41,7 @@ import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
 import org.sakaiproject.nakamura.api.lite.authorizable.Group;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessService;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessor;
+import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.util.osgi.AbstractOrderedService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -103,8 +104,10 @@ public class AuthorizablePostProcessServiceImpl extends
   public void process(Authorizable authorizable, Session session,
       ModificationType change, Map<String, Object[]> parameters) throws Exception {
     // Set up the Modification argument.
-    final String path = authorizable.getId();
-    Modification modification = new Modification(change, path, null);
+    final String pathPrefix = authorizable instanceof Group ? UserConstants.SYSTEM_USER_MANAGER_GROUP_PREFIX
+                                                           : UserConstants.SYSTEM_USER_MANAGER_USER_PREFIX;
+    Modification modification = new Modification(change, pathPrefix
+        + authorizable.getId(), null);
 
     if (change != ModificationType.DELETE) {
       doInternalProcessing(authorizable, session, modification, parameters);

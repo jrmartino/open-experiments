@@ -55,7 +55,7 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 
-import javax.jcr.RepositoryException;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 
 /**
@@ -178,7 +178,7 @@ public class CreateSakaiUserServlet extends AbstractUserPostServlet {
    */
   private transient AuthorizablePostProcessService postProcessorService;
 
-  private String adminUserId = null;
+  private static final String ADMIN_USER_ID = User.ADMIN_USER;
 
   private Object lock = new Object();
 
@@ -203,14 +203,16 @@ public class CreateSakaiUserServlet extends AbstractUserPostServlet {
   /**
    * Return the administrative session and close it.
    * 
-   * @throws ClientPoolException
+   * @throws IllegalStateException
    */
   private void ungetSession(final Session session) {
-    try {
-      session.logout();
-    } catch (ClientPoolException e) {
-      log.error("Could not log out of session");
-      throw new IllegalStateException(e);
+    if (session != null) {
+      try {
+        session.logout();
+      } catch (ClientPoolException e) {
+        log.error("Could not log out of session");
+        throw new IllegalStateException(e);
+      }
     }
   }
 
@@ -242,28 +244,13 @@ public class CreateSakaiUserServlet extends AbstractUserPostServlet {
    */
   @Override
   protected void handleOperation(SlingHttpServletRequest request, HtmlResponse response,
-      List<Modification> changes) throws RepositoryException {
+      List<Modification> changes) throws ServletException {
 
     // check for an administrator
     boolean administrator = false;
     try {
       Session currentSession = request.getResourceResolver().adaptTo(Session.class);
-      /*
-       * LDS: This next block of code that sets member variable "adminUserId" looks buggy
-       * to me. Why not just set adminUserId = User.ADMIN_USER and be done with it? I
-       * don't understand why the current user must be admin before this variable get
-       * initialized.
-       */
-      if (adminUserId == null) {
-        synchronized (lock) {
-          administrator = User.ADMIN_USER.equals(currentSession.getUserId());
-          if (administrator) {
-            adminUserId = User.ADMIN_USER;
-          }
-        }
-      } else {
-        administrator = adminUserId.equals(currentSession.getUserId());
-      }
+      administrator = ADMIN_USER_ID.equals(currentSession.getUserId());
     } catch (Exception ex) {
       log.warn("Failed to determin if the user is an admin, assuming not. Cause: "
           + ex.getMessage());
@@ -271,7 +258,7 @@ public class CreateSakaiUserServlet extends AbstractUserPostServlet {
     }
     if (!administrator) {
       if (!selfRegistrationEnabled) {
-        throw new RepositoryException(
+        throw new ServletException(
             "Sorry, registration of new users is not currently enabled. Please try again later.");
       }
 
@@ -296,13 +283,13 @@ public class CreateSakaiUserServlet extends AbstractUserPostServlet {
 
     Session session = request.getResourceResolver().adaptTo(Session.class);
     if (session == null) {
-      throw new IllegalStateException("Sparse Session not found");
+      throw new ServletException("Sparse Session not found");
     }
 
     // check that the submitted parameter values have valid values.
     String principalName = request.getParameter(SlingPostConstants.RP_NODE_NAME);
     if (principalName == null) {
-      throw new IllegalStateException("User name was not submitted");
+      throw new ServletException("User name was not submitted");
     }
 
     NameSanitizer san = new NameSanitizer(principalName, true);
@@ -310,11 +297,11 @@ public class CreateSakaiUserServlet extends AbstractUserPostServlet {
 
     String pwd = request.getParameter("pwd");
     if (pwd == null) {
-      throw new RepositoryException("Password was not submitted");
+      throw new ServletException("Password was not submitted");
     }
     String pwdConfirm = request.getParameter("pwdConfirm");
     if (!pwd.equals(pwdConfirm)) {
-      throw new RepositoryException(
+      throw new ServletException(
           "Password value does not match the confirmation password");
     }
 
@@ -324,7 +311,7 @@ public class CreateSakaiUserServlet extends AbstractUserPostServlet {
       final AuthorizableManager am = adminSession.getAuthorizableManager();
       final Authorizable existing = am.findAuthorizable(principalName);
       if (existing != null) {
-        IllegalStateException e = new IllegalStateException(
+        ServletException e = new ServletException(
             "Cannot create new user it already exists: " + principalName);
         log.warn(e.getMessage());
         response.setStatus(HttpServletResponse.SC_CONFLICT, e.getMessage());
@@ -332,7 +319,7 @@ public class CreateSakaiUserServlet extends AbstractUserPostServlet {
       }
       final Map<String, Object> empty = Collections.emptyMap();
       if (!am.createUser(principalName, principalName, digestPassword(pwd), empty)) {
-        Error e = new Error("Could not create new user");
+        ServletException e = new ServletException("Could not create new user");
         log.error(e.getMessage(), e);
         response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
         return;
@@ -358,11 +345,6 @@ public class CreateSakaiUserServlet extends AbstractUserPostServlet {
       try {
         postProcessorService
             .process(user, adminSession, ModificationType.CREATE, request);
-      } catch (RepositoryException e) {
-        log.warn("Failed to create user {} ", e.getMessage());
-        log.debug("Failed to create user {} ", e.getMessage(), e);
-        response.setStatus(HttpServletResponse.SC_CONFLICT, e.getMessage());
-        return;
       } catch (Exception e) {
         log.warn(e.getMessage(), e);
         response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
@@ -379,15 +361,12 @@ public class CreateSakaiUserServlet extends AbstractUserPostServlet {
         // Trap all exception so we don't disrupt the normal behaviour.
         log.error("Failed to launch an OSGi event for creating a user.", e);
       }
-    } catch (RepositoryException e) {
-      log.error(e.getMessage(), e);
-      throw e;
     } catch (StorageClientException e) {
       log.error(e.getLocalizedMessage(), e);
-      throw new RepositoryException(e);
+      throw new ServletException(e);
     } catch (AccessDeniedException e) {
       log.error(e.getLocalizedMessage(), e);
-      throw new RepositoryException(e);
+      throw new ServletException(e);
     } finally {
       ungetSession(adminSession);
     }

@@ -50,7 +50,6 @@ import java.util.List;
 import java.util.Map;
 
 import javax.jcr.PropertyType;
-import javax.jcr.RepositoryException;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -198,9 +197,10 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
    * @param htmlResponse
    *          the response
    * @param changes
+   * @throws ServletException
    */
   abstract protected void handleOperation(SlingHttpServletRequest request,
-      HtmlResponse htmlResponse, List<Modification> changes) throws RepositoryException;
+      HtmlResponse htmlResponse, List<Modification> changes) throws ServletException;
 
   /**
    * compute redirect URL (SLING-126)
@@ -455,12 +455,9 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
    * @param response
    *          The <code>HtmlResponse</code> to be updated with information on deleted
    *          properties.
-   * @throws RepositoryException
-   *           Is thrown if an error occurrs checking or removing properties.
    */
   protected void processDeletes(Authorizable resource,
-      Map<String, RequestProperty> reqProperties, List<Modification> changes)
-      throws RepositoryException {
+      Map<String, RequestProperty> reqProperties, List<Modification> changes) {
 
     for (RequestProperty property : reqProperties.values()) {
       if (property.isDelete()) {
@@ -484,7 +481,7 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
    */
   protected void writeContent(Session session, Authorizable authorizable,
       Map<String, RequestProperty> reqProperties, List<Modification> changes)
-      throws RepositoryException, StorageClientException, AccessDeniedException {
+      throws StorageClientException, AccessDeniedException {
 
     for (RequestProperty prop : reqProperties.values()) {
       if (prop.hasValues()) {
@@ -529,8 +526,8 @@ public abstract class AbstractAuthorizablePostServlet extends SlingAllMethodsSer
    * @throws AccessDeniedException
    */
   private void setPropertyAsIs(Session session, Authorizable parent,
-      RequestProperty prop, List<Modification> changes) throws RepositoryException,
-      StorageClientException, AccessDeniedException {
+      RequestProperty prop, List<Modification> changes) throws StorageClientException,
+      AccessDeniedException {
 
     final String propPath = parent.getId() + "@" + prop.getName();
 
