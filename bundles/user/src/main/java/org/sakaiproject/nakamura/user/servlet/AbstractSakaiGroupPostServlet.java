@@ -54,7 +54,7 @@ public abstract class AbstractSakaiGroupPostServlet extends
 
   /**
    * The JCR Repository we access to resolve resources
-   *
+   * 
    * @scr.reference
    */
   protected transient SlingRepository repository;
@@ -65,19 +65,20 @@ public abstract class AbstractSakaiGroupPostServlet extends
    * Update the group membership based on the ":member" request parameters. If the
    * ":member" value ends with @Delete it is removed from the group membership, otherwise
    * it is added to the group membership.
-   *
+   * 
    * @param request
    * @param authorizable
    * @throws RepositoryException
    */
   protected void updateGroupMembership(SlingHttpServletRequest request,
       Authorizable authorizable, List<Modification> changes) throws RepositoryException {
-    updateGroupMembership(request, authorizable,
-        SlingPostConstants.RP_PREFIX + "member", changes);
+    updateGroupMembership(request, authorizable, SlingPostConstants.RP_PREFIX + "member",
+        changes);
   }
 
   protected void updateGroupMembership(SlingHttpServletRequest request,
-      Authorizable authorizable, String paramName, List<Modification> changes) throws RepositoryException {
+      Authorizable authorizable, String paramName, List<Modification> changes)
+      throws RepositoryException {
     if (authorizable.isGroup()) {
       Group group = ((Group) authorizable);
       String groupPath = AuthorizableResourceProvider.SYSTEM_USER_MANAGER_GROUP_PREFIX
@@ -91,37 +92,39 @@ public abstract class AbstractSakaiGroupPostServlet extends
           .adaptTo(Session.class));
 
       // first remove any members posted as ":member@Delete"
-      String[] membersToDelete = request.getParameterValues(paramName + SlingPostConstants.SUFFIX_DELETE);
+      String[] membersToDelete = request.getParameterValues(paramName
+          + SlingPostConstants.SUFFIX_DELETE);
       if (membersToDelete != null) {
         for (String member : membersToDelete) {
           Authorizable memberAuthorizable = getAuthorizable(baseResource, member,
               userManager, resolver);
           if (memberAuthorizable != null) {
-            if(!UserConstants.ANON_USERID.equals(resolver.getUserID())
-                && memberAuthorizable.getID().equals(resolver.getUserID())){
-              //since the current user is the member being removed,
-              //we can grab admin session since user should be able to delete themselves from a group
+            if (!UserConstants.ANON_USERID.equals(resolver.getUserID())
+                && memberAuthorizable.getID().equals(resolver.getUserID())) {
+              // since the current user is the member being removed,
+              // we can grab admin session since user should be able to delete themselves
+              // from a group
               Session adminSession = getSession();
-              try{
+              try {
                 UserManager adminManager = AccessControlUtil.getUserManager(adminSession);
-                Group adminAuthGroup = (Group) adminManager.getAuthorizable(group.getID());
-                if(adminAuthGroup != null){
+                Group adminAuthGroup = (Group) adminManager
+                    .getAuthorizable(group.getID());
+                if (adminAuthGroup != null) {
                   adminAuthGroup.removeMember(memberAuthorizable);
                   changed = true;
                 }
 
-              }finally{
+              } finally {
                 ungetSession(adminSession);
               }
-            }else{
-              //current user is not the member being removed
+            } else {
+              // current user is not the member being removed
               group.removeMember(memberAuthorizable);
               changed = true;
             }
           }
         }
       }
-
 
       Joinable groupJoin = getJoinable(group);
 
@@ -134,24 +137,25 @@ public abstract class AbstractSakaiGroupPostServlet extends
           Authorizable memberAuthorizable = getAuthorizable(baseResource, member,
               userManager, resolver);
           if (memberAuthorizable != null) {
-            if(!UserConstants.ANON_USERID.equals(resolver.getUserID())
+            if (!UserConstants.ANON_USERID.equals(resolver.getUserID())
                 && Joinable.yes.equals(groupJoin)
-                && memberAuthorizable.getID().equals(resolver.getUserID())){
-              //we can grab admin session since group allows all users to join
+                && memberAuthorizable.getID().equals(resolver.getUserID())) {
+              // we can grab admin session since group allows all users to join
               Session adminSession = getSession();
-              try{
+              try {
                 UserManager adminManager = AccessControlUtil.getUserManager(adminSession);
-                Group adminAuthGroup = (Group) adminManager.getAuthorizable(group.getID());
-                if(adminAuthGroup != null){
+                Group adminAuthGroup = (Group) adminManager
+                    .getAuthorizable(group.getID());
+                if (adminAuthGroup != null) {
                   adminAuthGroup.addMember(memberAuthorizable);
                   changed = true;
                 }
-              }finally{
+              } finally {
                 ungetSession(adminSession);
               }
-            }else{
-              //group is restricted, so use the current user's authorization
-              //to add the member to the group:
+            } else {
+              // group is restricted, so use the current user's authorization
+              // to add the member to the group:
               group.addMember(memberAuthorizable);
               changed = true;
             }
@@ -177,7 +181,8 @@ public abstract class AbstractSakaiGroupPostServlet extends
     }
   }
 
-  private Group getPeerGroupOf(Group group, UserManager userManager) throws RepositoryException {
+  private Group getPeerGroupOf(Group group, UserManager userManager)
+      throws RepositoryException {
     Group peerGroup = null;
     if (group.hasProperty(UserConstants.PROP_MANAGERS_GROUP)) {
       Value values[] = group.getProperty(UserConstants.PROP_MANAGERS_GROUP);
@@ -196,7 +201,7 @@ public abstract class AbstractSakaiGroupPostServlet extends
   /**
    * Gets the member, assuming its a principal name, failing that it assumes it a path to
    * the resource.
-   *
+   * 
    * @param member
    *          the token pointing to the member, either a name or a uri
    * @param userManager
@@ -345,7 +350,8 @@ public abstract class AbstractSakaiGroupPostServlet extends
    */
   public Joinable getJoinable(Authorizable authorizable) {
     try {
-      if (authorizable instanceof Group && authorizable.hasProperty(UserConstants.PROP_JOINABLE_GROUP)) {
+      if (authorizable instanceof Group
+          && authorizable.hasProperty(UserConstants.PROP_JOINABLE_GROUP)) {
         try {
           Value[] joinable = authorizable.getProperty(UserConstants.PROP_JOINABLE_GROUP);
           if (joinable != null && joinable.length > 0)
