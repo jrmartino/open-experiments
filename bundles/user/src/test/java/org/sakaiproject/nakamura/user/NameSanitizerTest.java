@@ -38,28 +38,28 @@ public class NameSanitizerTest {
     boolean result = testName(name, false);
     assertEquals(name + " is an correct name. This should pass.", true, result);
   }
-  
+
   @Test
   public void testShortUserName() {
     String name = "CD";
     boolean result = testName(name, true);
     assertEquals(name + " is an incorrect name. This should fail.", false, result);
   }
-  
+
   @Test
   public void testEmailAsUsername() {
     String name = "g-man@gmail.com";
     boolean result = testName(name, true);
     assertEquals(name + " is a correct name. This should pass.", true, result);
   }
-  
+
   @Test
   public void testInvalidCharactersGroup() {
     String name = "g-foo%$*bar";
     boolean result = testName(name, true);
     assertEquals(name + " is a correct name. This should pass.", true, result);
   }
-  
+
   private boolean testName(String name, boolean isUser) {
     NameSanitizer san = new NameSanitizer(name, isUser);
     try {

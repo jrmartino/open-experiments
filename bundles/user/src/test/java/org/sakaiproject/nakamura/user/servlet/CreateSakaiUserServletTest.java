@@ -56,7 +56,7 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
     badNodeNameParam("g-contacts-all", "'g-contacts-' is a reserved prefix.");
   }
 
-  private void badNodeNameParam(String name, String exception) throws  RepositoryException {
+  private void badNodeNameParam(String name, String exception) throws RepositoryException {
     CreateSakaiUserServlet csus = new CreateSakaiUserServlet();
     csus.requestTrustValidatorService = requestTrustValidatorService;
 
@@ -69,12 +69,12 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
     User user = createMock(User.class);
     expect(request.getResourceResolver()).andReturn(rr).anyTimes();
     expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
-    
+
     expect(session.getUserManager()).andReturn(userManager);
     expect(session.getUserID()).andReturn("userID");
     expect(userManager.getAuthorizable("userID")).andReturn(user);
     expect(user.isAdmin()).andReturn(false);
-    
+
     expect(request.getParameter(":create-auth")).andReturn("reCAPTCHA");
     expect(request.getParameter(SlingPostConstants.RP_NODE_NAME)).andReturn(name);
 
@@ -107,15 +107,13 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
     expect(request.getResourceResolver()).andReturn(rr).anyTimes();
     expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
 
-    
-    
     expect(session.getUserManager()).andReturn(userManager);
     expect(session.getUserID()).andReturn("userID");
     expect(userManager.getAuthorizable("userID")).andReturn(user);
     expect(user.isAdmin()).andReturn(false);
 
     expect(request.getParameter(":create-auth")).andReturn("reCAPTCHA");
-    
+
     expect(request.getParameter(SlingPostConstants.RP_NODE_NAME)).andReturn("foo");
     expect(request.getParameter("pwd")).andReturn(null);
 
@@ -148,7 +146,6 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
     expect(request.getResourceResolver()).andReturn(rr).anyTimes();
     expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
 
-
     expect(session.getUserManager()).andReturn(userManager);
     expect(session.getUserID()).andReturn("userID");
     expect(userManager.getAuthorizable("userID")).andReturn(user);
@@ -168,13 +165,12 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
       csus.handleOperation(request, response, null);
       fail();
     } catch (RepositoryException e) {
-      assertEquals("Password value does not match the confirmation password", e
-          .getMessage());
+      assertEquals("Password value does not match the confirmation password",
+          e.getMessage());
     }
     verify();
   }
-  
-  
+
   @Test
   public void testRequestTrusted() throws RepositoryException {
     CreateSakaiUserServlet csus = new CreateSakaiUserServlet();
@@ -190,27 +186,25 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
     expect(request.getResourceResolver()).andReturn(rr).anyTimes();
     expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
 
-    
-    
     expect(session.getUserManager()).andReturn(userManager);
     expect(session.getUserID()).andReturn("userID");
     expect(userManager.getAuthorizable("userID")).andReturn(user);
     expect(user.isAdmin()).andReturn(false);
-    
+
     expect(request.getParameter(":create-auth")).andReturn("typeA");
     RequestTrustValidatorService requestTrustValidatorService = createMock(RequestTrustValidatorService.class);
     RequestTrustValidator requestTrustValidator = createMock(RequestTrustValidator.class);
-    expect(requestTrustValidatorService.getValidator("typeA")).andReturn(requestTrustValidator);
+    expect(requestTrustValidatorService.getValidator("typeA")).andReturn(
+        requestTrustValidator);
     expect(requestTrustValidator.getLevel()).andReturn(RequestTrustValidator.CREATE_USER);
     expect(requestTrustValidator.isTrusted(request)).andReturn(true);
-    
+
     expect(request.getParameter(SlingPostConstants.RP_NODE_NAME)).andReturn("foo");
     expect(request.getParameter("pwd")).andReturn("bar");
     expect(request.getParameter("pwdConfirm")).andReturn("baz");
 
     HtmlResponse response = new HtmlResponse();
 
-    
     csus.requestTrustValidatorService = requestTrustValidatorService;
     replay();
 
@@ -218,8 +212,8 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
       csus.handleOperation(request, response, null);
       fail();
     } catch (RepositoryException e) {
-      assertEquals("Password value does not match the confirmation password", e
-          .getMessage());
+      assertEquals("Password value does not match the confirmation password",
+          e.getMessage());
     }
     verify();
   }
