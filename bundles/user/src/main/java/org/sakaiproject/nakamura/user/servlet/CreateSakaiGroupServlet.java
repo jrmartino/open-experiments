@@ -16,23 +16,15 @@
  */
 package org.sakaiproject.nakamura.user.servlet;
 
+import static org.sakaiproject.nakamura.api.lite.authorizable.Group.EVERYONE_GROUP;
 import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_GROUP_MANAGERS;
 import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_GROUP_VIEWERS;
 import static org.sakaiproject.nakamura.api.user.UserConstants.SYSTEM_USER_MANAGER_GROUP_PREFIX;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.jackrabbit.api.security.principal.PrincipalIterator;
-import org.apache.jackrabbit.api.security.principal.PrincipalManager;
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.Group;
-import org.apache.jackrabbit.api.security.user.User;
-import org.apache.jackrabbit.api.security.user.UserManager;
 import org.apache.jackrabbit.core.security.SecurityConstants;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.servlets.HtmlResponse;
-import org.apache.sling.jackrabbit.usermanager.impl.resource.AuthorizableResourceProvider;
-import org.apache.sling.jcr.api.SlingRepository;
-import org.apache.sling.jcr.base.util.AccessControlUtil;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
 import org.apache.sling.servlets.post.SlingPostConstants;
@@ -49,6 +41,14 @@ import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceParameter;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
 import org.sakaiproject.nakamura.api.doc.ServiceSelector;
+import org.sakaiproject.nakamura.api.lite.Repository;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
+import org.sakaiproject.nakamura.api.lite.authorizable.User;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessService;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.user.NameSanitizer;
@@ -56,17 +56,15 @@ import org.sakaiproject.nakamura.util.osgi.EventUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.security.Principal;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Dictionary;
-import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 
 /**
@@ -145,11 +143,11 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
       .getLogger(CreateSakaiGroupServlet.class);
 
   /**
-   * The JCR Repository we access to resolve resources
+   * The Sparse Repository we access to resolve resources
    * 
    * @scr.reference
    */
-  protected transient SlingRepository repository;
+  protected transient Repository repository;
 
   /**
    * Used to launch OSGi events.
@@ -185,7 +183,7 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
   @Override
   @edu.umd.cs.findbugs.annotations.SuppressWarnings(justification = "If there is an exception, the user is certainly not admin", value = { "REC_CATCH_EXCEPTION" })
   protected void handleOperation(SlingHttpServletRequest request, HtmlResponse response,
-      List<Modification> changes) throws RepositoryException {
+      List<Modification> changes) throws ServletException {
 
     // KERN-432 dont allow anon users to access create group.
     if (SecurityConstants.ANONYMOUS_ID.equals(request.getRemoteUser())) {
@@ -196,7 +194,7 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
     // check that the submitted parameter values have valid values.
     final String principalName = request.getParameter(SlingPostConstants.RP_NODE_NAME);
     if (principalName == null) {
-      throw new RepositoryException("Group name was not submitted");
+      throw new ServletException("Group name was not submitted");
     }
 
     NameSanitizer san = new NameSanitizer(principalName, false);
@@ -208,25 +206,18 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
 
     try {
       Session currentSession = request.getResourceResolver().adaptTo(Session.class);
-      UserManager um = AccessControlUtil.getUserManager(currentSession);
-      currentUser = (User) um.getAuthorizable(currentSession.getUserID());
+      AuthorizableManager um = currentSession.getAuthorizableManager();
+      currentUser = (User) um.findAuthorizable(currentSession.getUserId());
       if (currentUser.isAdmin()) {
         LOGGER.debug("User is an admin ");
         allowCreateGroup = true;
       } else {
         LOGGER.debug("Checking for membership of one of {} ",
             Arrays.toString(authorizedGroups));
-        PrincipalManager principalManager = AccessControlUtil
-            .getPrincipalManager(currentSession);
-        PrincipalIterator pi = principalManager.getGroupMembership(principalManager
-            .getPrincipal(currentSession.getUserID()));
-        Set<String> groups = new HashSet<String>();
-        for (; pi.hasNext();) {
-          groups.add(pi.nextPrincipal().getName());
-        }
+        String[] groupMemberships = getGroupMembership(currentUser);
 
         for (String groupName : authorizedGroups) {
-          if (groups.contains(groupName)) {
+          if (Arrays.asList(groupMemberships).contains(groupName)) {
             allowCreateGroup = true;
             break;
           }
@@ -234,15 +225,16 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
           // TODO: move this nasty hack into the PrincipalManager dynamic groups need to
           // be in the principal manager for this to work.
           if ("authenticated".equals(groupName)
-              && !SecurityConstants.ADMIN_ID.equals(currentUser.getID())) {
+              && !SecurityConstants.ADMIN_ID.equals(currentUser.getId())) {
             allowCreateGroup = true;
             break;
           }
 
           // just check via the user manager for dynamic resolution.
-          Group group = (Group) um.getAuthorizable(groupName);
+          Group group = (Group) um.findAuthorizable(groupName);
           LOGGER.debug("Checking for group  {} {} ", groupName, group);
-          if (group != null && group.isMember(currentUser)) {
+          final List<String> groupMembers = Arrays.asList(group.getMembers());
+          if (group != null && groupMembers.contains(currentUser.getId())) {
             allowCreateGroup = true;
             LOGGER.debug("User is a member  of {} {} ", groupName, group);
             break;
@@ -262,11 +254,11 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
       return;
     }
 
-    Session session = getSession();
+    Session adminSession = getAdminSession();
 
     try {
-      UserManager userManager = AccessControlUtil.getUserManager(session);
-      Authorizable authorizable = userManager.getAuthorizable(principalName);
+      AuthorizableManager userManager = adminSession.getAuthorizableManager();
+      Authorizable authorizable = userManager.findAuthorizable(principalName);
 
       if (authorizable != null) {
         // principal already exists!
@@ -274,20 +266,16 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
             + principalName);
         return;
       } else {
-        Group group = userManager.createGroup(new Principal() {
-          public String getName() {
-            return principalName;
-          }
-        });
-        String groupPath = AuthorizableResourceProvider.SYSTEM_USER_MANAGER_GROUP_PREFIX
-            + group.getID();
+        userManager.createGroup(principalName, principalName, null);
+        Group group = (Group) userManager.findAuthorizable(principalName);
+        String groupPath = SYSTEM_USER_MANAGER_GROUP_PREFIX + group.getId();
         Map<String, RequestProperty> reqProperties = collectContent(request, response,
             groupPath);
 
         response.setPath(groupPath);
         response.setLocation(externalizePath(request, groupPath));
         response.setParentLocation(externalizePath(request,
-            AuthorizableResourceProvider.SYSTEM_USER_MANAGER_GROUP_PATH));
+            UserConstants.SYSTEM_USER_MANAGER_GROUP_PATH));
         changes.add(Modification.onCreated(groupPath));
 
         // It is not allowed to touch the rep:group-managers property directly.
@@ -296,7 +284,7 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
         reqProperties.remove(key + PROP_GROUP_VIEWERS);
 
         // write content from form
-        writeContent(session, group, reqProperties, changes);
+        writeContent(adminSession, group, reqProperties, changes);
 
         // update the group memberships, although this uses session from the request, it
         // only
@@ -305,11 +293,12 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
         updateGroupMembership(request, group, changes);
         // TODO We should probably let the client decide whether the
         // current user belongs in the managers list or not.
-        updateOwnership(request, group, new String[] { currentUser.getID() }, changes);
+        updateOwnership(request, group, new String[] { currentUser.getId() }, changes);
 
         try {
-          postProcessorService.process(group, session, ModificationType.CREATE, request);
-        } catch (RepositoryException e) {
+          postProcessorService.process(group, adminSession, ModificationType.CREATE,
+              request);
+        } catch (ServletException e) {
           LOGGER.info("Failed to create Group  {}", e.getMessage());
           response.setStatus(HttpServletResponse.SC_CONFLICT, e.getMessage());
           return;
@@ -331,39 +320,23 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
           LOGGER.error("Failed to launch an OSGi event for creating a user.", e);
         }
       }
-    } catch (RepositoryException re) {
+    } catch (ServletException re) {
       LOGGER.info("Failed to create Group  {}", re.getMessage());
       LOGGER.debug("Failed to create Group Cause {}", re, re.getMessage());
       response.setStatus(HttpServletResponse.SC_CONFLICT, re.getMessage());
       return;
+    } catch (StorageClientException e) {
+      LOGGER.info("Failed to create Group  {}", e.getMessage());
+      LOGGER.debug("Failed to create Group Cause {}", e, e.getMessage());
+      response.setStatus(HttpServletResponse.SC_CONFLICT, e.getMessage());
+      return;
+    } catch (AccessDeniedException e) {
+      LOGGER.info("Failed to create Group  {}", e.getMessage());
+      LOGGER.debug("Failed to create Group Cause {}", e, e.getMessage());
+      response.setStatus(HttpServletResponse.SC_FORBIDDEN, e.getMessage());
+      return;
     } finally {
-      ungetSession(session);
-    }
-  }
-
-  /** Returns the JCR repository used by this service. */
-  @Override
-  protected SlingRepository getRepository() {
-    return repository;
-  }
-
-  /**
-   * Returns an administrative session to the default workspace.
-   */
-  private Session getSession() throws RepositoryException {
-    return getRepository().loginAdministrative(null);
-  }
-
-  /**
-   * Return the administrative session and close it.
-   */
-  private void ungetSession(final Session session) {
-    if (session != null) {
-      try {
-        session.logout();
-      } catch (Throwable t) {
-        LOGGER.error("Unable to log out of session: " + t.getMessage(), t);
-      }
+      ungetSession(adminSession);
     }
   }
 
@@ -398,4 +371,22 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
     }
   }
 
+  public String[] getGroupMembership(final Authorizable a) {
+
+    final List<String> memberIds = new ArrayList<String>();
+    boolean anonymous = true;
+    if (a != null) {
+      Collections.addAll(memberIds, a.getPrincipals());
+      if (!User.ANON_USER.equals(a.getId())) {
+        anonymous = false;
+      }
+    } else { // could not find az
+      return null;
+    }
+    // add the everyone group if it is not there already
+    if (!anonymous && !memberIds.contains(EVERYONE_GROUP.getId())) {
+      memberIds.add(EVERYONE_GROUP.getId());
+    }
+    return (String[]) memberIds.toArray();
+  }
 }
