@@ -112,6 +112,7 @@ public abstract class AbstractSakaiGroupPostServlet extends
                     .getId());
                 if (adminAuthGroup != null) {
                   adminAuthGroup.removeMember(memberAuthorizable.getId());
+                  adminManager.updateAuthorizable(adminAuthGroup);
                   changed = true;
                 }
 
@@ -121,6 +122,7 @@ public abstract class AbstractSakaiGroupPostServlet extends
             } else {
               // current user is not the member being removed
               group.removeMember(memberAuthorizable.getId());
+              userManager.updateAuthorizable(group);
               changed = true;
             }
           }
@@ -149,6 +151,7 @@ public abstract class AbstractSakaiGroupPostServlet extends
                     .getId());
                 if (adminAuthGroup != null) {
                   adminAuthGroup.addMember(memberAuthorizable.getId());
+                  adminManager.updateAuthorizable(adminAuthGroup);
                   changed = true;
                 }
               } finally {
@@ -158,6 +161,7 @@ public abstract class AbstractSakaiGroupPostServlet extends
               // group is restricted, so use the current user's authorization
               // to add the member to the group:
               group.addMember(memberAuthorizable.getId());
+              userManager.updateAuthorizable(group);
               changed = true;
             }
             if (peerGroup != null) {
@@ -171,6 +175,7 @@ public abstract class AbstractSakaiGroupPostServlet extends
         if (peerGroup != null) {
           for (Authorizable member : membersToRemoveFromPeer) {
             peerGroup.removeMember(member.getId());
+            userManager.updateAuthorizable(peerGroup);
           }
         }
       }
