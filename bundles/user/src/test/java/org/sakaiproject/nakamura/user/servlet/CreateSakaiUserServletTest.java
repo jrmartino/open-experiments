@@ -33,6 +33,7 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
 
   @Before
   public void setUp() throws Exception {
+    super.setUp();
     requestTrustValidatorService = new RequestTrustValidatorService() {
 
       public RequestTrustValidator getValidator(String name) {
