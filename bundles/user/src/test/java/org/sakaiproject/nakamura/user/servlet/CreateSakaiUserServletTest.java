@@ -14,12 +14,12 @@ import org.junit.Before;
 import org.junit.Test;
 import org.sakaiproject.nakamura.api.auth.trusted.RequestTrustValidator;
 import org.sakaiproject.nakamura.api.auth.trusted.RequestTrustValidatorService;
+import org.sakaiproject.nakamura.api.lite.Repository;
 import org.sakaiproject.nakamura.api.lite.Session;
 import org.sakaiproject.nakamura.api.lite.StorageClientException;
 import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
 import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
 import org.sakaiproject.nakamura.lite.BaseMemoryRepository;
-import org.sakaiproject.nakamura.lite.RepositoryImpl;
 import org.sakaiproject.nakamura.testutils.easymock.AbstractEasyMockTest;
 
 import javax.servlet.ServletException;
@@ -29,12 +29,10 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
 
   private static final String USER_ID = "userID";
   private RequestTrustValidatorService requestTrustValidatorService;
-  private RepositoryImpl repository;
+  private Repository repository;
 
   @Before
   public void setUp() throws Exception {
-    super.setUp();
-
     requestTrustValidatorService = new RequestTrustValidatorService() {
 
       public RequestTrustValidator getValidator(String name) {
