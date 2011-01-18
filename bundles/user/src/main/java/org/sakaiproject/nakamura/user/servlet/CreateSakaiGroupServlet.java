@@ -266,9 +266,11 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
             + principalName);
         return;
       } else {
-        userManager.createGroup(principalName, principalName, null);
+        // TODO BL120 - create group with empty properties for now and fill later?
+        final Map<String, Object> emptyProperties = Collections.emptyMap();
+        userManager.createGroup(principalName, principalName, emptyProperties);
         Group group = (Group) userManager.findAuthorizable(principalName);
-        String groupPath = SYSTEM_USER_MANAGER_GROUP_PREFIX + group.getId();
+        final String groupPath = SYSTEM_USER_MANAGER_GROUP_PREFIX + group.getId();
         Map<String, RequestProperty> reqProperties = collectContent(request, response,
             groupPath);
 
@@ -308,6 +310,9 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
               .setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
           return;
         }
+
+        // save the modified group
+        userManager.updateAuthorizable(group);
 
         // Launch an OSGi event for creating a group.
         try {
@@ -388,5 +393,17 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
       memberIds.add(EVERYONE_GROUP.getId());
     }
     return (String[]) memberIds.toArray();
+  }
+
+  /**
+   * @param repository
+   *          the repository to set
+   */
+  public void setRepository(Repository repository) {
+    if (repository == null) {
+      throw new IllegalArgumentException("repository == null");
+    }
+    super.repository = repository;
+    this.repository = repository;
   }
 }
