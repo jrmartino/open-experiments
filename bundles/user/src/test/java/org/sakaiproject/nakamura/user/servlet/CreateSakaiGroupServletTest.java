@@ -1,217 +1,201 @@
 package org.sakaiproject.nakamura.user.servlet;
 
-import static org.easymock.EasyMock.capture;
-import static org.easymock.EasyMock.expect;
-import static org.easymock.EasyMock.expectLastCall;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-import org.apache.jackrabbit.api.JackrabbitSession;
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.Group;
-import org.apache.jackrabbit.api.security.user.User;
-import org.apache.jackrabbit.api.security.user.UserManager;
-import org.apache.jackrabbit.core.security.SecurityConstants;
+import com.google.common.collect.ImmutableMap;
+
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.request.RequestParameter;
 import org.apache.sling.api.request.RequestParameterMap;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.api.servlets.HtmlResponse;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
 import org.apache.sling.servlets.post.SlingPostConstants;
-import org.easymock.Capture;
-import org.easymock.EasyMock;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.runners.MockitoJUnitRunner;
+import org.sakaiproject.nakamura.api.lite.ClientPoolException;
+import org.sakaiproject.nakamura.api.lite.Repository;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
+import org.sakaiproject.nakamura.api.lite.authorizable.User;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessService;
 import org.sakaiproject.nakamura.api.user.UserConstants;
-import org.sakaiproject.nakamura.testutils.easymock.AbstractEasyMockTest;
+import org.sakaiproject.nakamura.lite.BaseMemoryRepository;
 
-import java.security.Principal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Vector;
 
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
-import javax.jcr.Value;
-import javax.jcr.ValueFactory;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletResponse;
 
-public class CreateSakaiGroupServletTest extends AbstractEasyMockTest {
+@RunWith(MockitoJUnitRunner.class)
+public class CreateSakaiGroupServletTest {
+  private static final String USER_ID = "lance";
+  private static final String PASSWORD = "password";
+  private static final String GROUP_ID = "g-foo";
+  private Session adminSession;
+  private AuthorizableManager adminAuthorizableManager;
+  private User adminUser;
+  private Session userSession;
+  private User user;
+  private Repository repository;
+  private CreateSakaiGroupServlet createSakaiGroupServlet;
+  @Mock
+  private SlingHttpServletRequest request;
+  @Mock
+  private ResourceResolver resourceResolver;
+  private HtmlResponse response = new HtmlResponse();
+  private List<Modification> changes = new ArrayList<Modification>();
+
+  @Before
+  public void setup() throws ClientPoolException, StorageClientException,
+      AccessDeniedException, ClassNotFoundException {
+    BaseMemoryRepository baseMemoryRepository = new BaseMemoryRepository();
+    repository = baseMemoryRepository.getRepository();
+    assertNotNull(repository);
+    adminSession = repository.loginAdministrative();
+    assertNotNull(adminSession);
+    adminAuthorizableManager = adminSession.getAuthorizableManager();
+    assertNotNull(adminAuthorizableManager);
+
+    adminUser = (User) adminAuthorizableManager
+        .findAuthorizable(UserConstants.ADMIN_USERID);
+    assertNotNull(adminUser);
+
+    assertTrue(adminAuthorizableManager.createUser(USER_ID, "Lance Speelmon", PASSWORD,
+        ImmutableMap.of("x", (Object) "y")));
+    user = (User) adminAuthorizableManager.findAuthorizable(USER_ID);
+    assertNotNull(user);
+    userSession = repository.login(USER_ID, PASSWORD);
+    assertNotNull(userSession);
+    assertEquals(USER_ID, userSession.getUserId());
+
+    when(request.getRemoteUser()).thenReturn(UserConstants.ADMIN_USERID);
+    when(request.getResourceResolver()).thenReturn(resourceResolver);
+    when(resourceResolver.adaptTo(Session.class)).thenReturn(adminSession);
+    createSakaiGroupServlet = new CreateSakaiGroupServlet();
+    createSakaiGroupServlet.setRepository(repository);
+  }
+
+  @After
+  public void tearDown() throws ClientPoolException {
+    adminSession.logout();
+  }
 
   @Test
   public void testNullGroupName() {
-    handleBadGroupName(null, "Group name was not submitted");
-  }
+    when(request.getParameter(SlingPostConstants.RP_NODE_NAME)).thenReturn(null);
 
-  private void handleBadGroupName(String name, String expectedMessage) {
-    CreateSakaiGroupServlet csgs = new CreateSakaiGroupServlet();
-
-    SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    expect(request.getRemoteUser()).andReturn(SecurityConstants.ADMIN_ID);
-
-    expect(request.getParameter(SlingPostConstants.RP_NODE_NAME)).andReturn(name);
-
-    HtmlResponse response = new HtmlResponse();
-
-    replay();
     try {
-      csgs.handleOperation(request, response, null);
+      createSakaiGroupServlet.handleOperation(request, response, changes);
       fail();
-    } catch (RepositoryException e) {
-      assertEquals(expectedMessage, e.getMessage());
+    } catch (ServletException e) {
+      assertEquals("Group name was not submitted", e.getMessage());
     }
-    verify();
   }
 
   @Test
-  public void testNoSession() throws RepositoryException {
-    CreateSakaiGroupServlet csgs = new CreateSakaiGroupServlet();
-    SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    expect(request.getRemoteUser()).andReturn(SecurityConstants.ANONYMOUS_ID);
+  public void testNoSession() throws ServletException {
+    when(request.getRemoteUser()).thenReturn(UserConstants.ANON_USERID);
 
-    HtmlResponse response = new HtmlResponse();
-
-    replay();
-
-    csgs.handleOperation(request, response, null);
+    createSakaiGroupServlet.handleOperation(request, response, changes);
     assertEquals(403, response.getStatusCode());
-    verify();
   }
 
   @Test
-  public void testPrincipalExists() throws RepositoryException {
-    CreateSakaiGroupServlet csgs = new CreateSakaiGroupServlet();
+  public void testPrincipalExists() throws StorageClientException, AccessDeniedException,
+      ServletException {
+    when(request.getParameter(SlingPostConstants.RP_NODE_NAME)).thenReturn(GROUP_ID);
 
-    Authorizable authorizable = createMock(Authorizable.class);
+    assertTrue(adminAuthorizableManager.createGroup(GROUP_ID, GROUP_ID,
+        ImmutableMap.of("x", (Object) "y")));
+    final Group group = (Group) adminAuthorizableManager.findAuthorizable(GROUP_ID);
+    assertNotNull(group);
 
-    User user = createMock(User.class);
-    UserManager userManager = createMock(UserManager.class);
-    JackrabbitSession session = createMock(JackrabbitSession.class);
-    ResourceResolver rr = createMock(ResourceResolver.class);
-    SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    SlingRepository repository = createMock(SlingRepository.class);
+    Vector<RequestParameter> parameters = new Vector<RequestParameter>();
+    when(request.getParameterNames()).thenReturn(parameters.elements());
 
-    csgs.repository = repository;
-    expect(request.getRemoteUser()).andReturn(SecurityConstants.ADMIN_ID);
+    RequestParameterMap requestParameterMap = mock(RequestParameterMap.class);
+    when(requestParameterMap.entrySet()).thenReturn(
+        new HashSet<Entry<String, RequestParameter[]>>());
+    when(request.getRequestParameterMap()).thenReturn(requestParameterMap);
 
-    expect(request.getParameter(SlingPostConstants.RP_NODE_NAME)).andReturn("g-foo");
-    expect(request.getResourceResolver()).andReturn(rr);
-    expect(rr.adaptTo(Session.class)).andReturn(session);
-    expect(session.getUserManager()).andReturn(userManager);
-    expect(session.getUserID()).andReturn("admin");
-    expect(userManager.getAuthorizable("admin")).andReturn(user);
-    expect(user.isAdmin()).andReturn(true);
-
-    expect(repository.loginAdministrative(null)).andReturn(session);
-    expect(session.getUserManager()).andReturn(userManager);
-
-    session.logout();
-    expectLastCall().anyTimes();
-
-    expect(userManager.getAuthorizable("g-foo")).andReturn(authorizable);
-
-    HtmlResponse response = new HtmlResponse();
-
-    replay();
-
-    csgs.handleOperation(request, response, null);
-    assertEquals(400, response.getStatusCode());
-    verify();
+    createSakaiGroupServlet.handleOperation(request, response, changes);
+    assertEquals(HttpServletResponse.SC_BAD_REQUEST, response.getStatusCode());
   }
 
   @Test
   public void testPrincipalNotExists() throws Exception {
-    CreateSakaiGroupServlet csgs = new CreateSakaiGroupServlet();
+    when(resourceResolver.map("/system/userManager/group/g-foo")).thenReturn("");
+    when(resourceResolver.map("/system/userManager/group")).thenReturn("");
 
-    UserManager userManager = createMock(UserManager.class);
-    JackrabbitSession session = createMock(JackrabbitSession.class);
+    when(request.getParameter("foo")).thenReturn("bar");
+    Vector<RequestParameter> requestParameters = new Vector<RequestParameter>();
+    Vector<String> requestParameterNames = new Vector<String>();
+    requestParameterNames.add("foo");
+    Map<String, RequestParameter[]> m = new HashMap<String, RequestParameter[]>();
+    RequestParameter rp = mock(RequestParameter.class);
 
-    Group group = createMock(Group.class);
-    User user = createMock(User.class);
+    when(rp.getString()).thenReturn("bar");
+    when(rp.isFormField()).thenReturn(true);
 
-    SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    ResourceResolver rr = createMock(ResourceResolver.class);
-    SlingRepository repository = createMock(SlingRepository.class);
-    ValueFactory valueFactory = createMock(ValueFactory.class);
-    Value value = createMock(Value.class);
-    csgs.repository = repository;
-    expect(request.getRemoteUser()).andReturn(SecurityConstants.ADMIN_ID);
+    RequestParameter[] rpa = { rp };
+    requestParameters.add(rp);
+    m.put("foo", rpa);
+    RequestParameterMap requestParameterMap = mock(RequestParameterMap.class);
+    when(requestParameterMap.entrySet()).thenReturn(m.entrySet());
 
-    expect(request.getResourceResolver()).andReturn(rr).anyTimes();
-    expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
-    expect(session.getUserManager()).andReturn(userManager).anyTimes();
-    expect(session.getUserID()).andReturn("admin");
-    expect(userManager.getAuthorizable("admin")).andReturn(user);
-    expect(user.isAdmin()).andReturn(true);
+    when(request.getParameter(SlingPostConstants.RP_NODE_NAME)).thenReturn(GROUP_ID);
+    when(request.getParameterNames()).thenReturn(requestParameterNames.elements());
+    when(request.getRequestParameterMap()).thenReturn(requestParameterMap);
+    when(request.getAttribute("javax.servlet.include.context_path")).thenReturn("");
+    when(request.getParameter(":displayExtension")).thenReturn("");
+    when(request.getResource()).thenReturn(null);
+    when(request.getParameterValues(":member@Delete")).thenReturn(new String[] {});
+    when(request.getParameterValues(":member")).thenReturn(new String[] {});
+    when(request.getParameterValues(":manager@Delete")).thenReturn(new String[] {});
+    when(request.getParameterValues(":manager")).thenReturn(new String[] {});
+    when(request.getParameterValues(":viewer@Delete")).thenReturn(new String[] {});
+    when(request.getParameterValues(":viewer")).thenReturn(new String[] {});
 
-    expect(repository.loginAdministrative(null)).andReturn(session);
+    when(request.getParameterValues("foo")).thenReturn(new String[] { "bar" });
 
-    session.logout();
-    expectLastCall().anyTimes();
+    AuthorizablePostProcessService authorizablePostProcessService = mock(AuthorizablePostProcessService.class);
+    createSakaiGroupServlet.postProcessorService = authorizablePostProcessService;
 
-    expect(userManager.getAuthorizable("g-foo")).andReturn(null);
-    expect(userManager.createGroup((Principal) EasyMock.anyObject())).andReturn(group);
-    expect(group.getID()).andReturn("g-foo").anyTimes();
-    expect(group.isGroup()).andReturn(true);
-    expect(session.getValueFactory()).andReturn(valueFactory);
+    createSakaiGroupServlet.handleOperation(request, response, changes);
 
-    expect(rr.map("/system/userManager/group/g-foo")).andReturn("");
-    expect(rr.map("/system/userManager/group")).andReturn("");
-
-    Vector<RequestParameter> parameters = new Vector<RequestParameter>();
-    RequestParameterMap requestParameterMap = createMock(RequestParameterMap.class);
-    expect(requestParameterMap.entrySet()).andReturn(
-        new HashSet<Entry<String, RequestParameter[]>>());
-
-    expect(request.getParameter(SlingPostConstants.RP_NODE_NAME)).andReturn("g-foo");
-    expect(request.getParameterNames()).andReturn(parameters.elements());
-    expect(request.getRequestParameterMap()).andReturn(requestParameterMap);
-    expect(request.getAttribute("javax.servlet.include.context_path")).andReturn("")
-        .times(2);
-    expect(request.getParameter(":displayExtension")).andReturn("").times(2);
-    expect(request.getResource()).andReturn(null);
-    expect(request.getParameterValues(":member@Delete")).andReturn(new String[] {});
-    expect(request.getParameterValues(":member")).andReturn(new String[] {});
-    expect(request.getParameterValues(":manager@Delete")).andReturn(new String[] {});
-    expect(request.getParameterValues(":manager")).andReturn(new String[] {});
-    expect(request.getParameterValues(":viewer@Delete")).andReturn(new String[] {});
-    expect(request.getParameterValues(":viewer")).andReturn(new String[] {});
-    expect(user.getID()).andReturn("admin");
-    expect(group.hasProperty(UserConstants.PROP_GROUP_MANAGERS)).andReturn(false);
-    expect(group.hasProperty(UserConstants.PROP_MANAGERS_GROUP)).andReturn(false);
-    expect(group.hasProperty(UserConstants.PROP_MANAGED_GROUP)).andReturn(false);
-    expect(group.hasProperty(UserConstants.PROP_GROUP_VIEWERS)).andReturn(false);
-    expect(group.hasProperty(UserConstants.PROP_JOINABLE_GROUP)).andReturn(false);
-
-    Capture<String> valueCapture = new Capture<String>();
-    expect(valueFactory.createValue(capture(valueCapture))).andReturn(value);
-    Capture<Value[]> valuesCapture = new Capture<Value[]>();
-    Capture<String> propertyName = new Capture<String>();
-    group.setProperty(capture(propertyName), capture(valuesCapture));
-    expectLastCall();
-
-    AuthorizablePostProcessService authorizablePostProcessService = createMock(AuthorizablePostProcessService.class);
-    authorizablePostProcessService.process((Authorizable) EasyMock.anyObject(),
-        (Session) EasyMock.anyObject(), (ModificationType) EasyMock.anyObject(),
-        (SlingHttpServletRequest) EasyMock.anyObject());
-    expectLastCall();
-
-    List<Modification> changes = new ArrayList<Modification>();
-    HtmlResponse response = new HtmlResponse();
-
-    replay();
-
-    csgs.postProcessorService = authorizablePostProcessService;
-
-    try {
-      csgs.handleOperation(request, response, changes);
-    } catch (RepositoryException e) {
-      e.printStackTrace();
-    }
-    verify();
+    verify(request, times(2)).getAttribute("javax.servlet.include.context_path");
+    verify(request, times(2)).getParameter(":displayExtension");
+    verify(authorizablePostProcessService, times(1)).process(any(Authorizable.class),
+        any(Session.class), any(ModificationType.class),
+        any(SlingHttpServletRequest.class));
+    final Group test = (Group) userSession.getAuthorizableManager().findAuthorizable(
+        GROUP_ID);
+    assertNotNull("Verify a different session can find the group", test);
+    assertEquals("bar", StorageClientUtils.toString(test.getSafeProperties().get("foo")));
   }
 }
