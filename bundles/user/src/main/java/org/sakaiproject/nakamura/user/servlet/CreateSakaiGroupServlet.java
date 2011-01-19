@@ -44,6 +44,7 @@ import org.sakaiproject.nakamura.api.doc.ServiceSelector;
 import org.sakaiproject.nakamura.api.lite.Repository;
 import org.sakaiproject.nakamura.api.lite.Session;
 import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
 import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
 import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
 import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
@@ -205,7 +206,8 @@ public class CreateSakaiGroupServlet extends AbstractSakaiGroupPostServlet imple
     User currentUser = null;
 
     try {
-      Session currentSession = request.getResourceResolver().adaptTo(Session.class);
+      final Session currentSession = StorageClientUtils.adaptToSession(request
+          .getResourceResolver().adaptTo(javax.jcr.Session.class));
       AuthorizableManager um = currentSession.getAuthorizableManager();
       currentUser = (User) um.findAuthorizable(currentSession.getUserId());
       if (currentUser.isAdmin()) {

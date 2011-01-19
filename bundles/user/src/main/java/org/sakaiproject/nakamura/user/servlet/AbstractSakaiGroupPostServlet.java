@@ -88,7 +88,8 @@ public abstract class AbstractSakaiGroupPostServlet extends
       Resource baseResource = request.getResource();
       boolean changed = false;
 
-      final Session session = request.getResourceResolver().adaptTo(Session.class);
+      final Session session = StorageClientUtils.adaptToSession(request
+          .getResourceResolver().adaptTo(javax.jcr.Session.class));
       final AuthorizableManager userManager = session.getAuthorizableManager();
 
       // first remove any members posted as ":member@Delete"

@@ -21,16 +21,12 @@ import org.apache.felix.scr.annotations.Properties;
 import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.sling.SlingServlet;
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.Group;
-import org.apache.jackrabbit.api.security.user.UserManager;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.SlingHttpServletResponse;
 import org.apache.sling.api.resource.Resource;
 import org.apache.sling.api.resource.ValueMap;
 import org.apache.sling.api.servlets.SlingSafeMethodsServlet;
 import org.apache.sling.commons.json.JSONException;
-import org.apache.sling.jcr.base.util.AccessControlUtil;
 import org.sakaiproject.nakamura.api.doc.BindingType;
 import org.sakaiproject.nakamura.api.doc.ServiceBinding;
 import org.sakaiproject.nakamura.api.doc.ServiceDocumentation;
@@ -38,6 +34,7 @@ import org.sakaiproject.nakamura.api.doc.ServiceExtension;
 import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
 import org.sakaiproject.nakamura.api.doc.ServiceSelector;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
 import org.sakaiproject.nakamura.api.profile.ProfileService;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.util.ExtendedJSONWriter;
@@ -53,9 +50,6 @@ import java.util.List;
 import java.util.Map.Entry;
 import java.util.TreeMap;
 
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
-import javax.jcr.Value;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 
@@ -150,7 +144,8 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
           items, page);
 
       // Write the whole lot out.
-      Session session = request.getResourceResolver().adaptTo(Session.class);
+      final Session session = StorageClientUtils.adaptToSession(request
+          .getResourceResolver().adaptTo(javax.jcr.Session.class));
       writer.array();
       int i = 0;
       while (iterator.hasNext() && i < items) {
@@ -248,7 +243,8 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
     // KERN-949 will probably change this.
     // note above was made before this was changed to retrieving members of the managers
     // group and may not apply.
-    Session session = request.getResourceResolver().adaptTo(Session.class);
+    final Session session = StorageClientUtils.adaptToSession(request
+        .getResourceResolver().adaptTo(javax.jcr.Session.class));
     UserManager um = AccessControlUtil.getUserManager(session);
     Value[] managersGroup = group.getProperty(UserConstants.PROP_MANAGERS_GROUP);
     if (managersGroup != null && managersGroup.length == 1) {

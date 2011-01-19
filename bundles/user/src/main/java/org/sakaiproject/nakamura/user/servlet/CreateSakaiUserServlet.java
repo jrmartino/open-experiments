@@ -38,6 +38,7 @@ import org.sakaiproject.nakamura.api.lite.ClientPoolException;
 import org.sakaiproject.nakamura.api.lite.Repository;
 import org.sakaiproject.nakamura.api.lite.Session;
 import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
 import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
 import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
 import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
@@ -249,7 +250,8 @@ public class CreateSakaiUserServlet extends AbstractUserPostServlet {
     // check for an administrator
     boolean administrator = false;
     try {
-      Session currentSession = request.getResourceResolver().adaptTo(Session.class);
+      final Session currentSession = StorageClientUtils.adaptToSession(request
+          .getResourceResolver().adaptTo(javax.jcr.Session.class));
       administrator = ADMIN_USER_ID.equals(currentSession.getUserId());
     } catch (Exception ex) {
       log.warn("Failed to determin if the user is an admin, assuming not. Cause: "
@@ -281,7 +283,8 @@ public class CreateSakaiUserServlet extends AbstractUserPostServlet {
       }
     }
 
-    Session session = request.getResourceResolver().adaptTo(Session.class);
+    final Session session = StorageClientUtils.adaptToSession(request
+        .getResourceResolver().adaptTo(javax.jcr.Session.class));
     if (session == null) {
       throw new ServletException("Sparse Session not found");
     }

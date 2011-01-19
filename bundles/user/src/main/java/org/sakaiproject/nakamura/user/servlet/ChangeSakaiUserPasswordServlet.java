@@ -17,13 +17,10 @@
  */
 package org.sakaiproject.nakamura.user.servlet;
 
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.User;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.resource.Resource;
 import org.apache.sling.api.resource.ResourceNotFoundException;
 import org.apache.sling.api.servlets.HtmlResponse;
-import org.apache.sling.jackrabbit.usermanager.impl.post.ChangeUserPasswordServlet;
 import org.apache.sling.servlets.post.Modification;
 import org.osgi.service.component.ComponentContext;
 import org.sakaiproject.nakamura.api.doc.BindingType;
@@ -33,11 +30,9 @@ import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceParameter;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
 import org.sakaiproject.nakamura.api.doc.ServiceSelector;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
 
 import java.util.List;
-
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
 
 /**
  * Sling Post Operation implementation for updating the password of a user in the
@@ -131,7 +126,8 @@ public class ChangeSakaiUserPasswordServlet extends ChangeUserPasswordServlet {
       throw new RepositoryException("Can not change the password of the anonymous user.");
     }
 
-    Session session = request.getResourceResolver().adaptTo(Session.class);
+    final Session session = StorageClientUtils.adaptToSession(request
+        .getResourceResolver().adaptTo(javax.jcr.Session.class));
     if (session == null) {
       throw new RepositoryException("JCR Session not found");
     }

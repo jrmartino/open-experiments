@@ -1,7 +1,5 @@
 package org.sakaiproject.nakamura.user.servlet;
 
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.Group;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.SlingHttpServletResponse;
 import org.apache.sling.api.resource.Resource;
@@ -14,6 +12,7 @@ import org.sakaiproject.nakamura.api.doc.ServiceDocumentation;
 import org.sakaiproject.nakamura.api.doc.ServiceExtension;
 import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
 import org.sakaiproject.nakamura.util.ExtendedJSONWriter;
 import org.sakaiproject.nakamura.util.PathUtils;
 
@@ -22,8 +21,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 
@@ -68,7 +65,8 @@ public class GroupGetServlet extends SlingSafeMethodsServlet {
       return;
     }
 
-    Session session = request.getResourceResolver().adaptTo(Session.class);
+    final Session session = StorageClientUtils.adaptToSession(request
+        .getResourceResolver().adaptTo(javax.jcr.Session.class));
     if (session == null) {
       response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
           "Unable to get repository session");

@@ -22,14 +22,10 @@ import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_GROUP_VIEWER
 import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_MANAGED_GROUP;
 import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_MANAGERS_GROUP;
 
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.Group;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.resource.Resource;
 import org.apache.sling.api.resource.ResourceNotFoundException;
 import org.apache.sling.api.servlets.HtmlResponse;
-import org.apache.sling.jackrabbit.usermanager.impl.resource.AuthorizableResourceProvider;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
 import org.apache.sling.servlets.post.impl.helper.RequestProperty;
@@ -42,6 +38,7 @@ import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceParameter;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
 import org.sakaiproject.nakamura.api.doc.ServiceSelector;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessService;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.util.osgi.EventUtils;
@@ -53,8 +50,6 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
 import javax.servlet.http.HttpServletResponse;
 
 /**
@@ -186,7 +181,8 @@ public class UpdateSakaiGroupServlet extends AbstractSakaiGroupPostServlet {
     if (authorizable == null) {
       throw new ResourceNotFoundException("Group to update could not be determined");
     }
-    Session session = request.getResourceResolver().adaptTo(Session.class);
+    final Session session = StorageClientUtils.adaptToSession(request
+        .getResourceResolver().adaptTo(javax.jcr.Session.class));
     if (session == null) {
       throw new RepositoryException("JCR Session not found");
     }
