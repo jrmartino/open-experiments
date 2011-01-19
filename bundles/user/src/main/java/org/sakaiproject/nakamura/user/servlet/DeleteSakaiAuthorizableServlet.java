@@ -37,6 +37,7 @@ import org.sakaiproject.nakamura.api.doc.ServiceParameter;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
 import org.sakaiproject.nakamura.api.doc.ServiceSelector;
 import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
 import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
 import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
 import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
@@ -149,59 +150,71 @@ public class DeleteSakaiAuthorizableServlet extends AbstractAuthorizablePostServ
   protected void handleOperation(SlingHttpServletRequest request, HtmlResponse response,
       List<Modification> changes) {
     Session session = StorageClientUtils.adaptToSession(request.getResourceResolver().adaptTo(javax.jcr.Session.class));
+    AuthorizableManager authorizableManager;
     try {
-      AuthorizableManager authorizableManager = session.getAuthorizableManager();
-      boolean mustExist;
-      Iterator<Resource> res = getApplyToResources(request);
-      if (res == null) {
-        mustExist = true;
-        res = Arrays.asList(new Resource[] {request.getResource()}).iterator();
-      } else {
-        mustExist = false;
+      authorizableManager = session.getAuthorizableManager();
+    } catch (StorageClientException e) {
+      LOGGER.warn(e.getMessage(),e);
+      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
+      return;
+    }
+    boolean mustExist;
+    Iterator<Resource> res = getApplyToResources(request);
+    if (res == null) {
+      Resource resource = request.getResource();
+      if (resource == null) {
+        String msg = "No resource specified for deletion";
+        response.setStatus(HttpServletResponse.SC_NOT_FOUND, msg);
+        throw new ResourceNotFoundException(msg);
       }
+      mustExist = true;
+      res = Arrays.asList(new Resource[] {resource}).iterator();
+    } else {
+      mustExist = false;
+    }
 
-      while (res.hasNext()) {
-        Resource resource = res.next();
-        Authorizable authorizable = resource.adaptTo(Authorizable.class);
-        if (authorizable == null) {
-          String msg = "Missing source " + resource.getPath() + " for delete";
-          if (mustExist) {
-            response.setStatus(HttpServletResponse.SC_NOT_FOUND, msg);
-            throw new ResourceNotFoundException(msg);
-          } else {
-            // Move on to the next one.
-            LOGGER.info(msg);
-          }
+    while (res.hasNext()) {
+      Resource resource = res.next();
+      Authorizable authorizable = resource.adaptTo(Authorizable.class);
+      if (authorizable == null) {
+        String msg = "Missing source " + resource.getPath() + " for delete";
+        if (mustExist) {
+          response.setStatus(HttpServletResponse.SC_NOT_FOUND, msg);
+          throw new ResourceNotFoundException(msg);
         } else {
+          // Move on to the next one.
+          LOGGER.info(msg);
+        }
+      } else {
+        try {
           // In the special case of deletion, the "post-processors" are treated as pre-processors.
           postProcessorService.process(authorizable, session, ModificationType.DELETE, request);
 
           // Remove Authorizable.
           authorizableManager.delete(authorizable.getId());
           changes.add(Modification.onDeleted(resource.getPath()));
+        } catch (Exception e) {
+          LOGGER.warn(e.getMessage(),e);
+          response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
+          return;
+        }
 
-          // Launch an OSGi event for each authorizable.
-          try {
-            Dictionary<String, String> properties = new Hashtable<String, String>();
-            properties.put(UserConstants.EVENT_PROP_USERID, authorizable.getId());
-            String topic;
-            if (authorizable instanceof Group) {
-              topic  = UserConstants.TOPIC_GROUP_DELETED;
-            } else {
-              topic = UserConstants.TOPIC_USER_DELETED;
-            }
-            EventUtils.sendOsgiEvent(properties, topic, eventAdmin);
-          } catch (Exception e) {
-            // Trap all exception so we don't disrupt the normal behaviour.
-            LOGGER.error("Failed to launch an OSGi event for creating a user.", e);
+        // Launch an OSGi event for each authorizable.
+        try {
+          Dictionary<String, String> properties = new Hashtable<String, String>();
+          properties.put(UserConstants.EVENT_PROP_USERID, authorizable.getId());
+          String topic;
+          if (authorizable instanceof Group) {
+            topic  = UserConstants.TOPIC_GROUP_DELETED;
+          } else {
+            topic = UserConstants.TOPIC_USER_DELETED;
           }
-
+          EventUtils.sendOsgiEvent(properties, topic, eventAdmin);
+        } catch (Exception e) {
+          // Trap all exception so we don't disrupt the normal behaviour.
+          LOGGER.error("Failed to launch an OSGi event for deleting an Authorizable.", e);
         }
       }
-    } catch (Exception e) {
-      LOGGER.warn(e.getMessage(),e);
-      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
-      return;
     }
   }
 
