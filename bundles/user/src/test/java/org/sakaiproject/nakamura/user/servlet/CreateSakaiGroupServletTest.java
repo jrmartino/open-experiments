@@ -25,10 +25,12 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.runners.MockitoJUnitRunner;
 import org.sakaiproject.nakamura.api.lite.ClientPoolException;
 import org.sakaiproject.nakamura.api.lite.Repository;
 import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.SessionAdaptable;
 import org.sakaiproject.nakamura.api.lite.StorageClientException;
 import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
 import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
@@ -94,8 +96,13 @@ public class CreateSakaiGroupServletTest {
     assertEquals(USER_ID, userSession.getUserId());
 
     when(request.getRemoteUser()).thenReturn(UserConstants.ADMIN_USERID);
+
+    javax.jcr.Session adaptable = mock(javax.jcr.Session.class, Mockito.withSettings()
+        .extraInterfaces(SessionAdaptable.class));
+    when(((SessionAdaptable) adaptable).getSession()).thenReturn(adminSession);
     when(request.getResourceResolver()).thenReturn(resourceResolver);
-    when(resourceResolver.adaptTo(Session.class)).thenReturn(adminSession);
+    when(resourceResolver.adaptTo(javax.jcr.Session.class)).thenReturn(adaptable);
+
     createSakaiGroupServlet = new CreateSakaiGroupServlet();
     createSakaiGroupServlet.setRepository(repository);
   }

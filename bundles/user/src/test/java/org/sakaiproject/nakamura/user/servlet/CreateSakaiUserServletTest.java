@@ -1,8 +1,9 @@
 package org.sakaiproject.nakamura.user.servlet;
 
-import static org.easymock.EasyMock.expect;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
 
@@ -12,20 +13,21 @@ import org.apache.sling.api.servlets.HtmlResponse;
 import org.apache.sling.servlets.post.SlingPostConstants;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 import org.sakaiproject.nakamura.api.auth.trusted.RequestTrustValidator;
 import org.sakaiproject.nakamura.api.auth.trusted.RequestTrustValidatorService;
 import org.sakaiproject.nakamura.api.lite.Repository;
 import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.SessionAdaptable;
 import org.sakaiproject.nakamura.api.lite.StorageClientException;
 import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
 import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
 import org.sakaiproject.nakamura.lite.BaseMemoryRepository;
-import org.sakaiproject.nakamura.testutils.easymock.AbstractEasyMockTest;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 
-public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
+public class CreateSakaiUserServletTest {
 
   private static final String USER_ID = "userID";
   private RequestTrustValidatorService requestTrustValidatorService;
@@ -33,7 +35,6 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
 
   @Before
   public void setUp() throws Exception {
-    super.setUp();
     requestTrustValidatorService = new RequestTrustValidatorService() {
 
       public RequestTrustValidator getValidator(String name) {
@@ -77,18 +78,19 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
 
     Session session = repository.loginAdministrative(USER_ID);
 
-    ResourceResolver rr = createMock(ResourceResolver.class);
+    ResourceResolver rr = mock(ResourceResolver.class);
 
-    SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    expect(request.getResourceResolver()).andReturn(rr).anyTimes();
-    expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
+    SlingHttpServletRequest request = mock(SlingHttpServletRequest.class);
+    when(request.getResourceResolver()).thenReturn(rr);
+    javax.jcr.Session adaptable = mock(javax.jcr.Session.class, Mockito.withSettings()
+        .extraInterfaces(SessionAdaptable.class));
+    when(((SessionAdaptable) adaptable).getSession()).thenReturn(session);
+    when(rr.adaptTo(javax.jcr.Session.class)).thenReturn(adaptable);
 
-    expect(request.getParameter(":create-auth")).andReturn("reCAPTCHA");
-    expect(request.getParameter(SlingPostConstants.RP_NODE_NAME)).andReturn(name);
+    when(request.getParameter(":create-auth")).thenReturn("reCAPTCHA");
+    when(request.getParameter(SlingPostConstants.RP_NODE_NAME)).thenReturn(name);
 
     HtmlResponse response = new HtmlResponse();
-
-    replay();
 
     try {
       csus.handleOperation(request, response, null);
@@ -96,7 +98,6 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
     } catch (ServletException e) {
       assertEquals(exception, e.getMessage());
     }
-    verify();
   }
 
   @Test
@@ -107,21 +108,22 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
 
     Session session = repository.loginAdministrative(USER_ID);
 
-    ResourceResolver rr = createMock(ResourceResolver.class);
-    expect(rr.adaptTo(Session.class)).andReturn(session);
+    ResourceResolver rr = mock(ResourceResolver.class);
+    when(rr.adaptTo(Session.class)).thenReturn(session);
 
-    SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    expect(request.getResourceResolver()).andReturn(rr).anyTimes();
-    expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
+    SlingHttpServletRequest request = mock(SlingHttpServletRequest.class);
+    when(request.getResourceResolver()).thenReturn(rr);
+    javax.jcr.Session adaptable = mock(javax.jcr.Session.class, Mockito.withSettings()
+        .extraInterfaces(SessionAdaptable.class));
+    when(((SessionAdaptable) adaptable).getSession()).thenReturn(session);
+    when(rr.adaptTo(javax.jcr.Session.class)).thenReturn(adaptable);
 
-    expect(request.getParameter(":create-auth")).andReturn("reCAPTCHA");
+    when(request.getParameter(":create-auth")).thenReturn("reCAPTCHA");
 
-    expect(request.getParameter(SlingPostConstants.RP_NODE_NAME)).andReturn("foo");
-    expect(request.getParameter("pwd")).andReturn(null);
+    when(request.getParameter(SlingPostConstants.RP_NODE_NAME)).thenReturn("foo");
+    when(request.getParameter("pwd")).thenReturn(null);
 
     HtmlResponse response = new HtmlResponse();
-
-    replay();
 
     try {
       csus.handleOperation(request, response, null);
@@ -129,7 +131,6 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
     } catch (ServletException e) {
       assertEquals("Password was not submitted", e.getMessage());
     }
-    verify();
   }
 
   @Test
@@ -140,22 +141,23 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
 
     Session session = repository.loginAdministrative(USER_ID);
 
-    ResourceResolver rr = createMock(ResourceResolver.class);
-    expect(rr.adaptTo(Session.class)).andReturn(session);
+    ResourceResolver rr = mock(ResourceResolver.class);
+    javax.jcr.Session adaptable = mock(javax.jcr.Session.class, Mockito.withSettings()
+        .extraInterfaces(SessionAdaptable.class));
+    when(((SessionAdaptable) adaptable).getSession()).thenReturn(session);
+    when(rr.adaptTo(javax.jcr.Session.class)).thenReturn(adaptable);
 
-    SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    expect(request.getResourceResolver()).andReturn(rr).anyTimes();
-    expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
+    SlingHttpServletRequest request = mock(SlingHttpServletRequest.class);
+    when(request.getResourceResolver()).thenReturn(rr);
+    when(rr.adaptTo(Session.class)).thenReturn(session);
 
-    expect(request.getParameter(":create-auth")).andReturn("reCAPTCHA");
+    when(request.getParameter(":create-auth")).thenReturn("reCAPTCHA");
 
-    expect(request.getParameter(SlingPostConstants.RP_NODE_NAME)).andReturn("foo");
-    expect(request.getParameter("pwd")).andReturn("bar");
-    expect(request.getParameter("pwdConfirm")).andReturn("baz");
+    when(request.getParameter(SlingPostConstants.RP_NODE_NAME)).thenReturn("foo");
+    when(request.getParameter("pwd")).thenReturn("bar");
+    when(request.getParameter("pwdConfirm")).thenReturn("baz");
 
     HtmlResponse response = new HtmlResponse();
-
-    replay();
 
     try {
       csus.handleOperation(request, response, null);
@@ -164,7 +166,6 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
       assertEquals("Password value does not match the confirmation password",
           e.getMessage());
     }
-    verify();
   }
 
   @Test
@@ -174,29 +175,31 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
 
     Session session = repository.loginAdministrative(USER_ID);
 
-    ResourceResolver rr = createMock(ResourceResolver.class);
-    expect(rr.adaptTo(Session.class)).andReturn(session);
+    ResourceResolver rr = mock(ResourceResolver.class);
+    when(rr.adaptTo(Session.class)).thenReturn(session);
 
-    SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    expect(request.getResourceResolver()).andReturn(rr).anyTimes();
-    expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
+    SlingHttpServletRequest request = mock(SlingHttpServletRequest.class);
+    when(request.getResourceResolver()).thenReturn(rr);
+    javax.jcr.Session adaptable = mock(javax.jcr.Session.class, Mockito.withSettings()
+        .extraInterfaces(SessionAdaptable.class));
+    when(((SessionAdaptable) adaptable).getSession()).thenReturn(session);
+    when(rr.adaptTo(javax.jcr.Session.class)).thenReturn(adaptable);
 
-    expect(request.getParameter(":create-auth")).andReturn("typeA");
-    RequestTrustValidatorService requestTrustValidatorService = createMock(RequestTrustValidatorService.class);
-    RequestTrustValidator requestTrustValidator = createMock(RequestTrustValidator.class);
-    expect(requestTrustValidatorService.getValidator("typeA")).andReturn(
+    when(request.getParameter(":create-auth")).thenReturn("typeA");
+    RequestTrustValidatorService requestTrustValidatorService = mock(RequestTrustValidatorService.class);
+    RequestTrustValidator requestTrustValidator = mock(RequestTrustValidator.class);
+    when(requestTrustValidatorService.getValidator("typeA")).thenReturn(
         requestTrustValidator);
-    expect(requestTrustValidator.getLevel()).andReturn(RequestTrustValidator.CREATE_USER);
-    expect(requestTrustValidator.isTrusted(request)).andReturn(true);
+    when(requestTrustValidator.getLevel()).thenReturn(RequestTrustValidator.CREATE_USER);
+    when(requestTrustValidator.isTrusted(request)).thenReturn(true);
 
-    expect(request.getParameter(SlingPostConstants.RP_NODE_NAME)).andReturn("foo");
-    expect(request.getParameter("pwd")).andReturn("bar");
-    expect(request.getParameter("pwdConfirm")).andReturn("baz");
+    when(request.getParameter(SlingPostConstants.RP_NODE_NAME)).thenReturn("foo");
+    when(request.getParameter("pwd")).thenReturn("bar");
+    when(request.getParameter("pwdConfirm")).thenReturn("baz");
 
     HtmlResponse response = new HtmlResponse();
 
     csus.requestTrustValidatorService = requestTrustValidatorService;
-    replay();
 
     try {
       csus.handleOperation(request, response, null);
@@ -205,6 +208,5 @@ public class CreateSakaiUserServletTest extends AbstractEasyMockTest {
       assertEquals("Password value does not match the confirmation password",
           e.getMessage());
     }
-    verify();
   }
 }

@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
@@ -33,10 +34,12 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.sakaiproject.nakamura.api.lite.ClientPoolException;
 import org.sakaiproject.nakamura.api.lite.Repository;
 import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.SessionAdaptable;
 import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
 import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
 import org.sakaiproject.nakamura.api.lite.authorizable.Group;
@@ -95,7 +98,10 @@ public class AbstractSakaiGroupPostServletTest {
     authorizableManager = session.getAuthorizableManager();
     assertNotNull(authorizableManager);
     when(request.getResourceResolver()).thenReturn(resourceResolver);
-    when(resourceResolver.adaptTo(Session.class)).thenReturn(session);
+    javax.jcr.Session adaptable = mock(javax.jcr.Session.class, Mockito.withSettings()
+        .extraInterfaces(SessionAdaptable.class));
+    when(((SessionAdaptable) adaptable).getSession()).thenReturn(session);
+    when(resourceResolver.adaptTo(javax.jcr.Session.class)).thenReturn(adaptable);
     when(resourceResolver.getUserID()).thenReturn(USER_ID);
     when(request.getRemoteUser()).thenReturn(USER_ID);
 
