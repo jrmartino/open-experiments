@@ -61,37 +61,17 @@ import javax.servlet.http.HttpServletResponse;
 
 /**
  * Also, when KERN-949 is fixed, we should change the getManagers() method.
- *
- *
+ * 
+ * 
  * Provides a listing for the members and managers of this group.
  */
-@ServiceDocumentation(
-  name = "Group Member Servlet",
-  description = "Provides a listing for the members and managers of this group.",
-  bindings = {
-    @ServiceBinding(
-      type = BindingType.TYPE,
-      bindings = { "sling/group" },
-      selectors = {
-        @ServiceSelector(name = "members", description = "Binds to the members selector."),
-        @ServiceSelector(name = "managers", description = "Binds to the managers selector."),
-        @ServiceSelector(name = "details", description = "Binds to the details selector.")
-      },
-      extensions = @ServiceExtension(name = "json", description = "javascript object notation")
-    )
-  },
-  methods = {
-    @ServiceMethod(
-      name = "GET",
-      description = "Create an external repository document.",
-      response = {
-        @ServiceResponse(code = 200, description = "All processing finished successfully."),
-        @ServiceResponse(code = 204, description = "Group doesn't exist."),
-        @ServiceResponse(code = 500, description = "Exception occurred during processing.")
-      }
-    )
-  }
-)
+@ServiceDocumentation(name = "Group Member Servlet", description = "Provides a listing for the members and managers of this group.", bindings = { @ServiceBinding(type = BindingType.TYPE, bindings = { "sling/group" }, selectors = {
+    @ServiceSelector(name = "members", description = "Binds to the members selector."),
+    @ServiceSelector(name = "managers", description = "Binds to the managers selector."),
+    @ServiceSelector(name = "details", description = "Binds to the details selector.") }, extensions = @ServiceExtension(name = "json", description = "javascript object notation")) }, methods = { @ServiceMethod(name = "GET", description = "Create an external repository document.", response = {
+    @ServiceResponse(code = 200, description = "All processing finished successfully."),
+    @ServiceResponse(code = 204, description = "Group doesn't exist."),
+    @ServiceResponse(code = 500, description = "Exception occurred during processing.") }) })
 @SlingServlet(resourceTypes = { "sling/group" }, methods = { "GET" }, selectors = {
     "members", "managers", "detailed" }, extensions = { "json" })
 @Properties(value = {
@@ -110,7 +90,7 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
 
   /**
    * {@inheritDoc}
-   *
+   * 
    * @see org.apache.sling.api.servlets.SlingSafeMethodsServlet#doGet(org.apache.sling.api.SlingHttpServletRequest,
    *      org.apache.sling.api.SlingHttpServletResponse)
    */
@@ -177,16 +157,16 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
         Entry<String, Authorizable> entry = iterator.next();
         Authorizable au = entry.getValue();
         ValueMap profile;
-        if(selectors.contains("detailed")){
+        if (selectors.contains("detailed")) {
           profile = profileService.getProfileMap(au, session);
-        }else{
+        } else {
           profile = profileService.getCompactProfileMap(au, session);
         }
         if (profile != null) {
           writer.valueMap(profile);
           i++;
         } else {
-          // profile wasn't found.  safe to ignore and not include the group
+          // profile wasn't found. safe to ignore and not include the group
           logger.info("Profile not found for " + au.getID());
         }
       }
@@ -210,8 +190,8 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
    * @return
    */
   private Iterator<Entry<String, Authorizable>> getInPlaceIterator(
-      SlingHttpServletRequest request, TreeMap<String, Authorizable> map,
-      long items, long page) {
+      SlingHttpServletRequest request, TreeMap<String, Authorizable> map, long items,
+      long page) {
     Iterator<Entry<String, Authorizable>> iterator = map.entrySet().iterator();
     long skipNum = items * page;
 
@@ -253,7 +233,7 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
    * <p>
    * <del>Get the managers for a group. These should be stored in the
    * {@link UserConstants#PROP_GROUP_MANAGERS}.</del>
-   *
+   * 
    * @param request
    * @param group
    * @param writer
@@ -292,7 +272,7 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
   /**
    * Get's the name for an authorizable on what the list should be sorted.
    * sakai:group-title for Groups, lastName for Users.
-   *
+   * 
    * @param member
    *          The authorizable to get a name for.
    * @return The name.

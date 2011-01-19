@@ -16,7 +16,6 @@
  */
 package org.sakaiproject.nakamura.user.servlet;
 
-
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Modified;
@@ -77,44 +76,28 @@ import javax.servlet.http.HttpServletResponse;
  * <dd>User does not exist.</dd>
  * </dl>
  * <h4>Example</h4>
- *
+ * 
  * <code>
  * curl http://localhost:8080/system/userManager/user.exists.html?userid=foo
  * </code>
- *
+ * 
  * <h4>Notes</h4>
  */
-@ServiceDocumentation(name="User Exists Servlet",
-    description="Tests for existence of user. This servlet responds at /system/userManager/user.exists.html",
-    shortDescription="Tests for existence of user",
-    bindings=@ServiceBinding(type=BindingType.PATH,bindings="/system/userManager/user.exists.html",
-        selectors=@ServiceSelector(name="exists", description="Tests for existence of user."),
-        extensions=@ServiceExtension(name="html", description="GETs produce HTML with request status.")),
-    methods=@ServiceMethod(name="GET",
-        description={"Checks for existence of user with id supplied in the userid parameter."},
-        parameters={
-        @ServiceParameter(name="userid", description="The id of the user to check for (required)")},
-        response={
-        @ServiceResponse(code=204,description="Success, user exists."),
-        @ServiceResponse(code=404,description="Bad request: the required userid parameter was missing.")
-        }))
-@Component(immediate=true, metatype=true, label="Sakai Nakamura :: User Existence Check Servlet",
-    description="Returns 204 if userid exists, 404 if not")
-@Service(value=javax.servlet.Servlet.class)
+@ServiceDocumentation(name = "User Exists Servlet", description = "Tests for existence of user. This servlet responds at /system/userManager/user.exists.html", shortDescription = "Tests for existence of user", bindings = @ServiceBinding(type = BindingType.PATH, bindings = "/system/userManager/user.exists.html", selectors = @ServiceSelector(name = "exists", description = "Tests for existence of user."), extensions = @ServiceExtension(name = "html", description = "GETs produce HTML with request status.")), methods = @ServiceMethod(name = "GET", description = { "Checks for existence of user with id supplied in the userid parameter." }, parameters = { @ServiceParameter(name = "userid", description = "The id of the user to check for (required)") }, response = {
+    @ServiceResponse(code = 204, description = "Success, user exists."),
+    @ServiceResponse(code = 404, description = "Bad request: the required userid parameter was missing.") }))
+@Component(immediate = true, metatype = true, label = "Sakai Nakamura :: User Existence Check Servlet", description = "Returns 204 if userid exists, 404 if not")
+@Service(value = javax.servlet.Servlet.class)
 @Properties(value = {
-    @Property(name="sling.servlet.resourceTypes", value="sling/users"),
-    @Property(name="sling.servlet.methods", value="GET"),
-    @Property(name="sling.servlet.selectors", value="exists")
-})
+    @Property(name = "sling.servlet.resourceTypes", value = "sling/users"),
+    @Property(name = "sling.servlet.methods", value = "GET"),
+    @Property(name = "sling.servlet.selectors", value = "exists") })
 public class UserExistsServlet extends SlingSafeMethodsServlet {
   private static final long serialVersionUID = 7051557537133012560L;
 
-  private static final Logger LOGGER = LoggerFactory
-      .getLogger(UserExistsServlet.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(UserExistsServlet.class);
 
-  @Property(label="Delay (MS)",
-      description="Number of milliseconds to delay before responding; 0 to return as quickly as possible",
-      longValue=UserExistsServlet.USER_EXISTS_DELAY_MS_DEFAULT)
+  @Property(label = "Delay (MS)", description = "Number of milliseconds to delay before responding; 0 to return as quickly as possible", longValue = UserExistsServlet.USER_EXISTS_DELAY_MS_DEFAULT)
   public static final String USER_EXISTS_DELAY_MS_PROPERTY = "user.exists.delay.ms";
   public static final long USER_EXISTS_DELAY_MS_DEFAULT = 200;
   protected long delayMs;
@@ -127,30 +110,35 @@ public class UserExistsServlet extends SlingSafeMethodsServlet {
       Session session = request.getResourceResolver().adaptTo(Session.class);
       RequestParameter idParam = request.getRequestParameter("userid");
       if (idParam == null) {
-        response.sendError(HttpServletResponse.SC_BAD_REQUEST, "This request must have a 'userid' parameter.");
+        response.sendError(HttpServletResponse.SC_BAD_REQUEST,
+            "This request must have a 'userid' parameter.");
         return;
       }
 
       if ("".equals(idParam)) {
-        response.sendError(HttpServletResponse.SC_BAD_REQUEST, "The 'userid' parameter must not be blank.");
+        response.sendError(HttpServletResponse.SC_BAD_REQUEST,
+            "The 'userid' parameter must not be blank.");
         return;
       }
       String id = idParam.getString();
       LOGGER.debug("Checking for existence of {}", id);
       if (session != null) {
-          UserManager userManager = AccessControlUtil.getUserManager(session);
-          if (userManager != null) {
-              Authorizable authorizable = userManager.getAuthorizable(id);
-              if (authorizable != null) {
-                  response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-              } else response.sendError(HttpServletResponse.SC_NOT_FOUND);
-          }
+        UserManager userManager = AccessControlUtil.getUserManager(session);
+        if (userManager != null) {
+          Authorizable authorizable = userManager.getAuthorizable(id);
+          if (authorizable != null) {
+            response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+          } else
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+        }
       }
     } catch (Exception e) {
-      response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getLocalizedMessage());
+      response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+          e.getLocalizedMessage());
       return;
     } finally {
-      LOGGER.debug("checking for existence took {} ms", System.currentTimeMillis() - start);
+      LOGGER.debug("checking for existence took {} ms", System.currentTimeMillis()
+          - start);
       if (delayMs > 0) {
         long remainingTime = delayMs - (System.currentTimeMillis() - start);
         if (remainingTime > 0) {
@@ -163,7 +151,8 @@ public class UserExistsServlet extends SlingSafeMethodsServlet {
     }
   }
 
-  @Activate @Modified
+  @Activate
+  @Modified
   protected void modified(Map<?, ?> props) {
     delayMs = OsgiUtil.toLong(props.get(USER_EXISTS_DELAY_MS_PROPERTY),
         USER_EXISTS_DELAY_MS_DEFAULT);
