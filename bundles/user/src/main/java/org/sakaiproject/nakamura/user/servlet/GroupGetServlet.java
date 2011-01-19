@@ -108,6 +108,9 @@ public class GroupGetServlet extends SlingSafeMethodsServlet {
       response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
           "Unable to render group details");
       return;
+    } catch (Throwable e) {
+      response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+          "Unable to render group details");
     }
   }
 
