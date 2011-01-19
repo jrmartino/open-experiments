@@ -26,6 +26,8 @@ public interface MessageConstants {
    *
    */
   public static final String SAKAI_MESSAGESTORE_RT = "sakai/messagestore";
+  
+  public static final String SAKAI_MESSAGE_PATH_PREFIX = "a:";
 
   /**
   *
@@ -168,4 +170,6 @@ public interface MessageConstants {
   public static final String MESSAGE_CREATE_PREPROCESSOR = "CreateMessagePreProcessor";
 
   public static final int CLEAUNUP_EVERY_X_SECONDS = 7200;
+  public static final String PROP_TEMPLATE_PATH = "sakai:templatePath";
+  public static final String PROP_TEMPLATE_PARAMS = "sakai:templateParams";
 }

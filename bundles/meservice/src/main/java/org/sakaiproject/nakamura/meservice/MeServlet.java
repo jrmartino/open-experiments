@@ -44,13 +44,14 @@ import org.sakaiproject.nakamura.api.doc.ServiceBinding;
 import org.sakaiproject.nakamura.api.doc.ServiceDocumentation;
 import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
+import org.sakaiproject.nakamura.api.lite.jackrabbit.JackrabbitSparseUtils;
+import org.sakaiproject.nakamura.api.message.LiteMessagingService;
 import org.sakaiproject.nakamura.api.message.MessagingException;
-import org.sakaiproject.nakamura.api.message.MessagingService;
-import org.sakaiproject.nakamura.api.personal.PersonalUtils;
 import org.sakaiproject.nakamura.api.profile.ProfileService;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.util.ExtendedJSONWriter;
 import org.sakaiproject.nakamura.util.PathUtils;
+import org.sakaiproject.nakamura.util.PersonalUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -102,7 +103,7 @@ public class MeServlet extends SlingSafeMethodsServlet {
   private static final String TIMEZONE_FIELD = "timezone";
 
   @Reference
-  protected transient MessagingService messagingService;
+  protected transient LiteMessagingService messagingService;
 
   @Reference
   protected transient ConnectionManager connectionManager;
@@ -217,7 +218,7 @@ public class MeServlet extends SlingSafeMethodsServlet {
     try {
       // This could just use ConnectionUtils.getConnectionPathBase, but that util class is
       // in the private package unfortunately.
-      String store = PersonalUtils.getHomeFolder(au) + "/"
+      String store = PersonalUtils.getHomePath(au) + "/"
           + ConnectionConstants.CONTACT_STORE_NAME;
       store = ISO9075.encodePath(store);
       StringBuilder statement = new StringBuilder("/jcr:root");
@@ -286,7 +287,7 @@ public class MeServlet extends SlingSafeMethodsServlet {
     // Get the path to the store for this user.
     long count = 0;
     try {
-      String store = messagingService.getFullPathToStore(au.getID(), session);
+      String store = messagingService.getFullPathToStore(au.getID(), JackrabbitSparseUtils.getSparseSession(session));
       store = ISO9075.encodePath(store);
       StringBuilder statement = new StringBuilder("/jcr:root");
       statement.append(store);
