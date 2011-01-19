@@ -35,7 +35,10 @@ import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceParameter;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
 import org.sakaiproject.nakamura.api.doc.ServiceSelector;
+import org.sakaiproject.nakamura.api.lite.Session;
 import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -121,9 +124,9 @@ public class UserExistsServlet extends SlingSafeMethodsServlet {
       String id = idParam.getString();
       LOGGER.debug("Checking for existence of {}", id);
       if (session != null) {
-        UserManager userManager = AccessControlUtil.getUserManager(session);
+        AuthorizableManager userManager = session.getAuthorizableManager();
         if (userManager != null) {
-          Authorizable authorizable = userManager.getAuthorizable(id);
+          Authorizable authorizable = userManager.findAuthorizable(id);
           if (authorizable != null) {
             response.setStatus(HttpServletResponse.SC_NO_CONTENT);
           } else
