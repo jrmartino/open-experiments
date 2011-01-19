@@ -110,6 +110,8 @@ public class CreateContentPoolServletTest {
   @Mock
   private ClusterTrackingService clusterTrackingService;
   @Mock
+  private ComponentContext componentContext;
+  @Mock
   private SlingHttpServletRequest request;
   @Mock
   private SlingHttpServletResponse response;
@@ -146,18 +148,14 @@ public class CreateContentPoolServletTest {
   public void testCreate() throws Exception {
 
     // activate
+    when(clusterTrackingService.getCurrentServerId()).thenReturn("serverID");
     when(slingRepository.loginAdministrative(null)).thenReturn(adminSession);
-<<<<<<< HEAD
     
     when(request.getResourceResolver()).thenReturn(resourceResolver);
     when(resourceResolver.adaptTo(javax.jcr.Session.class)).thenReturn(jcrSesson);
     Session session = repository.loginAdministrative("ieb");
     when(jcrSesson.getUserManager()).thenReturn(sparseMapUserManager);
     when(sparseMapUserManager.getSession()).thenReturn(session);
-=======
-    when(clusterTrackingService.getClusterUniqueId()).thenReturn(String.valueOf(System.currentTimeMillis()));
-
->>>>>>> cf936bb7d72159b53b80e0dc88d9ca3b334714a4
 
     when(request.getRequestPathInfo()).thenReturn(requestPathInfo);
     when(requestPathInfo.getExtension()).thenReturn(null);
