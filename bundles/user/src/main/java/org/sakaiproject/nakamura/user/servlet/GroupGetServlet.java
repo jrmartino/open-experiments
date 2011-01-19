@@ -12,13 +12,15 @@ import org.sakaiproject.nakamura.api.doc.ServiceDocumentation;
 import org.sakaiproject.nakamura.api.doc.ServiceExtension;
 import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
+import org.sakaiproject.nakamura.api.lite.Session;
 import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
 import org.sakaiproject.nakamura.util.ExtendedJSONWriter;
 import org.sakaiproject.nakamura.util.PathUtils;
 
 import java.io.IOException;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Set;
 
 import javax.servlet.ServletException;
@@ -60,7 +62,7 @@ public class GroupGetServlet extends SlingSafeMethodsServlet {
       authorizable = resource.adaptTo(Authorizable.class);
     }
 
-    if (authorizable == null || !authorizable.isGroup()) {
+    if (authorizable == null || !(authorizable instanceof Group)) {
       response.sendError(HttpServletResponse.SC_NO_CONTENT, "Couldn't find group");
       return;
     }
@@ -93,24 +95,18 @@ public class GroupGetServlet extends SlingSafeMethodsServlet {
 
       Group group = (Group) authorizable;
       Set<String> memberNames = new HashSet<String>();
-      Iterator<Authorizable> members = group.getMembers();
-      while (members.hasNext()) {
-        Authorizable member = members.next();
-        String name = member.getPrincipal().getName();
-        if (!memberNames.contains(name)) {
-          write.value(name);
+      final String[] members = group.getMembers();
+      for (final String member : members) {
+        if (!memberNames.contains(member)) {
+          write.value(member);
         }
-        memberNames.add(name);
+        memberNames.add(member);
       }
       write.endArray();
       write.endObject();
     } catch (JSONException e) {
       response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
           "Unable to render group details");
-      return;
-    } catch (RepositoryException e) {
-      response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-          "Error reading from repository");
       return;
     }
   }
