@@ -17,13 +17,6 @@
  */
 package org.sakaiproject.nakamura.user;
 
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import org.apache.jackrabbit.api.JackrabbitSession;
-import org.apache.jackrabbit.api.security.principal.ItemBasedPrincipal;
-import org.apache.jackrabbit.api.security.user.User;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
 import org.junit.Before;
@@ -31,54 +24,28 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.runners.MockitoJUnitRunner;
-import org.sakaiproject.nakamura.api.user.UserConstants;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.authorizable.User;
 
 import java.util.HashMap;
-
-import javax.jcr.RepositoryException;
-import javax.jcr.Value;
-import javax.jcr.ValueFactory;
 
 @RunWith(MockitoJUnitRunner.class)
 public class SakaiUserProcessorTest {
   private SakaiUserProcessor sakaiUserProcessor;
   @Mock
-  private JackrabbitSession session;
+  private Session session;
   @Mock
   private User user;
-  @Mock
-  private ItemBasedPrincipal principal;
-  @Mock
-  private ValueFactory valueFactory;
-  @Mock
-  private Value pathValue;
 
   @Before
-  public void setUp() throws RepositoryException {
+  public void setUp() {
     sakaiUserProcessor = new SakaiUserProcessor();
-    when(user.getPrincipal()).thenReturn(principal);
-    when(principal.getPath()).thenReturn(UserConstants.USER_REPO_LOCATION + "/joe");
-    when(session.getValueFactory()).thenReturn(valueFactory);
-    when(valueFactory.createValue("/joe")).thenReturn(pathValue);
   }
 
   @Test
-  public void pathIsSetOnCreation() throws Exception {
+  public void nilTest() throws Exception {
+    // Does nothing except verify that an exception isn't thrown.
     sakaiUserProcessor.process(user, session, new Modification(ModificationType.CREATE, "", ""), new HashMap<String, Object[]>());
-    verify(user).setProperty(UserConstants.PROP_AUTHORIZABLE_PATH, pathValue);
-  }
-
-  @Test
-  public void pathIsNotOverwritten() throws Exception {
-    when(user.hasProperty(UserConstants.PROP_AUTHORIZABLE_PATH)).thenReturn(true);
-    sakaiUserProcessor.process(user, session, new Modification(ModificationType.CREATE, "", ""), new HashMap<String, Object[]>());
-    verify(user, never()).setProperty(UserConstants.PROP_AUTHORIZABLE_PATH, pathValue);
-  }
-
-  @Test
-  public void pathIsLeftAloneOnDeletion() throws Exception {
-    sakaiUserProcessor.process(user, session, new Modification(ModificationType.DELETE, "", ""), new HashMap<String, Object[]>());
-    verify(user, never()).setProperty(UserConstants.PROP_AUTHORIZABLE_PATH, pathValue);
   }
 
 }

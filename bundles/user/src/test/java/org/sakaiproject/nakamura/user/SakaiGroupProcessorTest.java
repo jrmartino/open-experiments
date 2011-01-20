@@ -18,95 +18,98 @@
 package org.sakaiproject.nakamura.user;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.sakaiproject.nakamura.api.lite.StorageClientUtils.toStore;
+import static org.sakaiproject.nakamura.api.lite.StorageClientUtils.toStringArray;
+import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_GROUP_MANAGERS;
+import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_MANAGED_GROUP;
+import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_MANAGERS_GROUP;
 
-import org.apache.jackrabbit.api.JackrabbitSession;
-import org.apache.jackrabbit.api.security.principal.ItemBasedPrincipal;
-import org.apache.jackrabbit.api.security.user.Group;
-import org.apache.jackrabbit.api.security.user.User;
-import org.apache.jackrabbit.api.security.user.UserManager;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
 import org.mockito.runners.MockitoJUnitRunner;
-import org.sakaiproject.nakamura.api.user.UserConstants;
+import org.sakaiproject.nakamura.api.lite.ClientPoolException;
+import org.sakaiproject.nakamura.api.lite.Repository;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
+import org.sakaiproject.nakamura.lite.BaseMemoryRepository;
 
-import java.security.Principal;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-
-import javax.jcr.RepositoryException;
-import javax.jcr.Value;
-import javax.jcr.ValueFactory;
 
 @RunWith(MockitoJUnitRunner.class)
 public class SakaiGroupProcessorTest {
+  private static final String GROUP_ID = "faculty";
   private SakaiGroupProcessor sakaiGroupProcessor;
-  @Mock
-  private JackrabbitSession session;
-  @Mock
+  private Repository repository;
+  private Session session;
   private Group group;
-  @Mock
-  private ItemBasedPrincipal principal;
-  @Mock
-  private ValueFactory valueFactory;
-  @Mock
-  private Value pathValue;
-  @Mock
-  private UserManager userManager;
-  @Mock
-  private Group managersGroup;
+  private AuthorizableManager authorizableManager;
 
   @Before
-  public void setUp() throws RepositoryException {
+  public void setUp() throws ClientPoolException, StorageClientException, AccessDeniedException, ClassNotFoundException {
+    BaseMemoryRepository baseMemoryRepository = new BaseMemoryRepository();
+    repository = baseMemoryRepository.getRepository();
+    assertNotNull(repository);
+    session = repository.loginAdministrative();
+    assertNotNull(session);
+    authorizableManager = session.getAuthorizableManager();
+    assertNotNull(authorizableManager);
+    authorizableManager.createGroup(GROUP_ID, GROUP_ID, new HashMap<String,Object>());
+    group = (Group) authorizableManager.findAuthorizable(GROUP_ID);
+    assertNotNull(group);
     sakaiGroupProcessor = new SakaiGroupProcessor();
-    when(group.isGroup()).thenReturn(true);
-    when(group.getID()).thenReturn("faculty");
-    when(group.getPrincipal()).thenReturn(principal);
-    when(principal.getPath()).thenReturn(UserConstants.GROUP_REPO_LOCATION + "/faculty");
-    when(session.getValueFactory()).thenReturn(valueFactory);
-    when(valueFactory.createValue("/faculty")).thenReturn(pathValue);
-    when(session.getUserManager()).thenReturn(userManager);
-    when(userManager.createGroup(any(Principal.class))).thenReturn(managersGroup);
+  }
+
+  @After
+  public void teardown() throws ClientPoolException {
+    session.logout();
   }
 
   @Test
   public void managersGroupCreated() throws Exception {
     sakaiGroupProcessor.process(group, session, new Modification(ModificationType.CREATE, "", ""),
         new HashMap<String, Object[]>());
-    verify(userManager).createGroup(any(Principal.class));
-    verify(group).setProperty(eq(UserConstants.PROP_GROUP_MANAGERS), any(Value[].class));
-    verify(group).setProperty(eq(UserConstants.PROP_MANAGERS_GROUP), any(Value.class));
-    verify(group).addMember(managersGroup);
-    verify(managersGroup).setProperty(eq(UserConstants.PROP_GROUP_MANAGERS), any(Value[].class));
-    verify(managersGroup).setProperty(eq(UserConstants.PROP_MANAGED_GROUP), any(Value.class));
+    group = (Group) authorizableManager.findAuthorizable(GROUP_ID);
+    String managersGroupId = StorageClientUtils.toString(group.getProperty(PROP_GROUP_MANAGERS));
+    assertNotNull(managersGroupId);
+    assertEquals(managersGroupId, StorageClientUtils.toString(group.getProperty(PROP_MANAGERS_GROUP)));
+    List<String> membersList = Arrays.asList(group.getMembers());
+    assertTrue(membersList.contains(managersGroupId));
+    Group managersGroup = (Group) authorizableManager.findAuthorizable(managersGroupId);
+    assertEquals(managersGroupId, StorageClientUtils.toString(managersGroup.getProperty(PROP_GROUP_MANAGERS)));
+    assertEquals(GROUP_ID, StorageClientUtils.toString(managersGroup.getProperty(PROP_MANAGED_GROUP)));
   }
 
   @Test
   public void canModifyManagersMembership() throws Exception {
-    when(group.hasProperty(UserConstants.PROP_MANAGERS_GROUP)).thenReturn(true);
-    Value mgrsValue = mock(Value.class);
-    when(mgrsValue.getString()).thenReturn("mgrs");
-    when(group.getProperty(UserConstants.PROP_MANAGERS_GROUP)).thenReturn(new Value[] {mgrsValue});
-    when(userManager.getAuthorizable("mgrs")).thenReturn(managersGroup);
-    User jane = mock(User.class);
-    when (userManager.getAuthorizable("jane")).thenReturn(jane);
-    User jean = mock(User.class);
-    when (userManager.getAuthorizable("jean")).thenReturn(jean);
-    User joe = mock(User.class);
-    when (userManager.getAuthorizable("joe")).thenReturn(joe);
-    User jim = mock(User.class);
-    when (userManager.getAuthorizable("jim")).thenReturn(jim);
+    assertTrue(authorizableManager.createUser("jane", "jane", "XXX", new HashMap<String,Object>()));
+    assertTrue(authorizableManager.createUser("jean", "jean", "XXX", new HashMap<String,Object>()));
+    assertTrue(authorizableManager.createUser("joe", "joe", "XXX", new HashMap<String,Object>()));
+    assertTrue(authorizableManager.createUser("jim", "jim", "XXX", new HashMap<String,Object>()));
+    String managersGroupId = GROUP_ID + "-managers";
+    authorizableManager.createGroup(managersGroupId, managersGroupId, new HashMap<String,Object>());
+    Group managersGroup = (Group) authorizableManager.findAuthorizable(managersGroupId);
+    managersGroup.addMember("joe");
+    managersGroup.addMember("jim");
+    authorizableManager.updateAuthorizable(managersGroup);
+
+    group.setProperty(PROP_MANAGERS_GROUP, managersGroupId);
+    authorizableManager.updateAuthorizable(group);
+
     Map<String, Object[]> parameters = new HashMap<String, Object[]>();
     parameters.put(SakaiGroupProcessor.PARAM_ADD_TO_MANAGERS_GROUP,
         new String[] {"jane", "jean"});
@@ -114,66 +117,42 @@ public class SakaiGroupProcessorTest {
         new String[] {"joe", "jim"});
     sakaiGroupProcessor.process(group, session, new Modification(ModificationType.MODIFY, "", ""),
         parameters);
-    verify(managersGroup).addMember(jane);
-    verify(managersGroup).addMember(jean);
-    verify(managersGroup).removeMember(joe);
-    verify(managersGroup).removeMember(jim);
+    managersGroup = (Group) authorizableManager.findAuthorizable(managersGroupId);
+    List<String> membersList = Arrays.asList(managersGroup.getMembers());
+    assertTrue(membersList.contains("jane"));
+    assertTrue(membersList.contains("jean"));
+    assertFalse(membersList.contains("joe"));
+    assertFalse(membersList.contains("jim"));
   }
 
   @Test
   public void existingRightsArePreserved() throws Exception {
-    when(group.hasProperty(UserConstants.PROP_GROUP_MANAGERS)).thenReturn(true);
-    when(group.hasProperty(UserConstants.PROP_GROUP_VIEWERS)).thenReturn(true);
-    Value accessValue = mock(Value.class);
-    when(accessValue.getString()).thenReturn("thecreator");
-    Value[] accessValues = new Value[] {accessValue};
-    when(group.getProperty(UserConstants.PROP_GROUP_MANAGERS)).thenReturn(accessValues);
+    String someoneWithManagerPrivs = "joe";
+    assertTrue(authorizableManager.createUser(someoneWithManagerPrivs, someoneWithManagerPrivs, "XXX", new HashMap<String,Object>()));
+    group.setProperty(PROP_GROUP_MANAGERS, toStore(new String[] {someoneWithManagerPrivs}));
+    authorizableManager.updateAuthorizable(group);
+
     sakaiGroupProcessor.process(group, session, new Modification(ModificationType.CREATE, "", ""),
         new HashMap<String, Object[]>());
-    ArgumentCaptor<Value[]> managerAccessArgument = ArgumentCaptor.forClass(Value[].class);
-    verify(group).setProperty(eq(UserConstants.PROP_GROUP_MANAGERS), managerAccessArgument.capture());
-    Value[] newAccessValues = managerAccessArgument.getValue();
-    assertEquals(2, newAccessValues.length);
-    for (Value value : newAccessValues) {
-      String stringValue = value.getString();
-      if (stringValue != null) {
-        if ("thecreator".equals(stringValue)) {
-          return;
-        }
-      }
-    }
-    fail("Did not find the orginal access setting");
+    group = (Group) authorizableManager.findAuthorizable(GROUP_ID);
+    String[] managerPrivsArray = toStringArray(group.getProperty(PROP_GROUP_MANAGERS));
+    assertNotNull(managerPrivsArray);
+    List<String> managerPrivsList = Arrays.asList(managerPrivsArray);
+    assertEquals(2, managerPrivsList.size());
+    assertTrue(managerPrivsList.contains(someoneWithManagerPrivs));
   }
 
   @Test
   public void managersGroupDeleted() throws Exception {
-    when(group.hasProperty(UserConstants.PROP_MANAGERS_GROUP)).thenReturn(true);
-    Value mgrsValue = mock(Value.class);
-    when(mgrsValue.getString()).thenReturn("mgrs");
-    when(group.getProperty(UserConstants.PROP_MANAGERS_GROUP)).thenReturn(new Value[] {mgrsValue});
-    when(userManager.getAuthorizable("mgrs")).thenReturn(managersGroup);
+    String managersGroupId = GROUP_ID + "-managers";
+    assertTrue(authorizableManager.createGroup(managersGroupId, managersGroupId,
+        new HashMap<String,Object>()));
+    group.setProperty(PROP_MANAGERS_GROUP, managersGroupId);
+    authorizableManager.updateAuthorizable(group);
+
     sakaiGroupProcessor.process(group, session, new Modification(ModificationType.DELETE, "", ""),
         new HashMap<String, Object[]>());
-    verify(managersGroup).remove();
-  }
-
-  @Test
-  public void pathIsSetOnCreation() throws Exception {
-    sakaiGroupProcessor.process(group, session, new Modification(ModificationType.CREATE, "", ""), new HashMap<String, Object[]>());
-    verify(group).setProperty(UserConstants.PROP_AUTHORIZABLE_PATH, pathValue);
-  }
-
-  @Test
-  public void pathIsNotOverwritten() throws Exception {
-    when(group.hasProperty(UserConstants.PROP_AUTHORIZABLE_PATH)).thenReturn(true);
-    sakaiGroupProcessor.process(group, session, new Modification(ModificationType.CREATE, "", ""), new HashMap<String, Object[]>());
-    verify(group, never()).setProperty(UserConstants.PROP_AUTHORIZABLE_PATH, pathValue);
-  }
-
-  @Test
-  public void pathIsLeftAloneOnDeletion() throws Exception {
-    sakaiGroupProcessor.process(group, session, new Modification(ModificationType.DELETE, "", ""), new HashMap<String, Object[]>());
-    verify(group, never()).setProperty(UserConstants.PROP_AUTHORIZABLE_PATH, pathValue);
+    assertNull(authorizableManager.findAuthorizable(managersGroupId));
   }
 
 }
