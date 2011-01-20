@@ -17,31 +17,32 @@
  */
 package org.sakaiproject.nakamura.user;
 
+import static org.sakaiproject.nakamura.api.lite.StorageClientUtils.toStore;
+import static org.sakaiproject.nakamura.api.lite.StorageClientUtils.toStringArray;
 import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_GROUP_MANAGERS;
 import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_MANAGED_GROUP;
 import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_MANAGERS_GROUP;
 
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.Group;
-import org.apache.jackrabbit.api.security.user.UserManager;
-import org.apache.sling.jcr.base.util.AccessControlUtil;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
 import org.apache.sling.servlets.post.SlingPostConstants;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessor;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.security.Principal;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
-
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
-import javax.jcr.Value;
-import javax.jcr.ValueFactory;
+import java.util.Set;
 
 /**
  * This class handles whatever processing is needed before the Jackrabbit Group modification
@@ -55,16 +56,15 @@ public class SakaiGroupProcessor extends AbstractAuthorizableProcessor implement
 
   /**
    * {@inheritDoc}
-   * @see org.sakaiproject.nakamura.api.user.AuthorizablePostProcessor#process(org.apache.jackrabbit.api.security.user.Authorizable, javax.jcr.Session, org.apache.sling.servlets.post.Modification, java.util.Map)
+   * @see org.sakaiproject.nakamura.api.user.AuthorizablePostProcessor#process(org.sakaiproject.nakamura.api.lite.authorizable.Authorizable, org.sakaiproject.nakamura.api.lite.Session, org.apache.sling.servlets.post.Modification, java.util.Map)
    */
   public void process(Authorizable authorizable, Session session, Modification change,
       Map<String, Object[]> parameters) throws Exception {
-    if (authorizable.isGroup()) {
+    if (authorizable instanceof Group) {
       Group group = (Group) authorizable;
       if (change.getType() == ModificationType.DELETE) {
         deleteManagersGroup(group, session);
       } else {
-        ensurePath(authorizable, session, UserConstants.GROUP_REPO_LOCATION);
         if (change.getType() == ModificationType.CREATE) {
           createManagersGroup(group, session);
         }
@@ -78,66 +78,63 @@ public class SakaiGroupProcessor extends AbstractAuthorizableProcessor implement
    * members with the Manager role. Such members have all access
    * rights over the Sakai group itself and may be given special access
    * rights to content.
+   * @throws AccessDeniedException
    */
-  private void createManagersGroup(Group group, Session session) throws RepositoryException {
-    UserManager userManager = AccessControlUtil.getUserManager(session);
-    String managersGroupId = makeUniqueAuthorizableId(group.getID() + "-managers", userManager);
+  private void createManagersGroup(Group group, Session session) throws StorageClientException, AccessDeniedException {
+    AuthorizableManager authorizableManager = session.getAuthorizableManager();
+    String managersGroupId = makeUniqueAuthorizableId(group.getId() + "-managers", authorizableManager);
+    Map<String, Object> managersProperties = new HashMap<String, Object>();
 
-    // Create the public self-managed managers group.
-    Group managersGroup = userManager.createGroup(makePrincipal(managersGroupId));
-    ValueFactory valueFactory = session.getValueFactory();
-    Value managersGroupValue = valueFactory.createValue(managersGroupId);
-    managersGroup.setProperty(PROP_GROUP_MANAGERS, new Value[] {managersGroupValue});
+    // TODO Find out if the old Nakamura-specific rep:group-managers and rep:group-viewers
+    // pseudo-permission properties have been replaced by normal ACLs on the Group record's
+    // storage.
+
+    // The Group Managers administer their own membership as well as the main Group's membership.
+    managersProperties.put(PROP_GROUP_MANAGERS, toStore(managersGroupId));
+    managersProperties.put(PROP_MANAGED_GROUP, toStore(group.getId()));
+
+    boolean isSuccess = authorizableManager.createGroup(managersGroupId, managersGroupId, managersProperties);
+    if (!isSuccess) {
+      throw new StorageClientException("Failed to generate Managers Group " + managersGroupId);
+    }
+    Group managersGroup = (Group) authorizableManager.findAuthorizable(managersGroupId);
+    if (managersGroup == null) {
+      throw new StorageClientException("Failed to retrieve Managers Group " + managersGroupId);
+    }
 
     // Add the managers group to its Sakai group.
-    group.addMember(managersGroup);
+    group.addMember(managersGroupId);
 
     // Have the managers group manage the Sakai group.
-    addStringToValues(group, PROP_GROUP_MANAGERS, managersGroupId, valueFactory);
+    String[] managerPrivilegedArray = toStringArray(group.getProperty(PROP_GROUP_MANAGERS));
+    Set<String> managerPrivilegedSet = new HashSet<String>();
+    if (managerPrivilegedArray != null) {
+      managerPrivilegedSet.addAll(Arrays.asList(managerPrivilegedArray));
+    }
+    managerPrivilegedSet.add(managersGroupId);
+    group.setProperty(PROP_GROUP_MANAGERS, toStore(managerPrivilegedSet.toArray(new String[managerPrivilegedSet.size()])));
 
     // Set the association between the two groups.
-    group.setProperty(PROP_MANAGERS_GROUP, managersGroupValue);
-    managersGroup.setProperty(PROP_MANAGED_GROUP, valueFactory.createValue(group.getID()));
-  }
+    group.setProperty(PROP_MANAGERS_GROUP, toStore(managersGroupId));
 
-  private void addStringToValues(Authorizable authorizable, String propertyName, String newString, ValueFactory valueFactory) throws RepositoryException {
-    List<Value> newValues = new ArrayList<Value>();
-    if (authorizable.hasProperty(propertyName)) {
-      Value[] oldValues = authorizable.getProperty(propertyName);
-      for (Value oldValue : oldValues) {
-        if (newString.equals(oldValue.getString())) {
-          return;
-        } else {
-          newValues.add(oldValue);
-        }
-      }
-    }
-    Value newValue = valueFactory.createValue(newString);
-    newValues.add(newValue);
-    authorizable.setProperty(propertyName, newValues.toArray(new Value[newValues.size()]));
-  }
-
-  private Principal makePrincipal(final String principalId) {
-    return new Principal() {
-      public String getName() {
-        return principalId;
-      }
-    };
+    // Update all.
+    authorizableManager.updateAuthorizable(managersGroup);
+    authorizableManager.updateAuthorizable(group);
   }
 
   /**
    * @param group
-   * @param session
+   * @param authorizableManager
    * @return the group that holds the group's Manager members, or null if there is no
    *         managers group or it is inaccessible
-   * @throws RepositoryException
+   * @throws AccessDeniedException
+   * @throws StorageClientException
    */
-  private Group getManagersGroup(Group group, UserManager userManager) throws RepositoryException {
+  private Group getManagersGroup(Group group, AuthorizableManager authorizableManager) throws AccessDeniedException, StorageClientException {
     Group managersGroup = null;
     if (group.hasProperty(UserConstants.PROP_MANAGERS_GROUP)) {
-      Value values[] = group.getProperty(UserConstants.PROP_MANAGERS_GROUP);
-      String managersGroupId = values[0].getString();
-      managersGroup = (Group) userManager.getAuthorizable(managersGroupId);
+      String managersGroupId = StorageClientUtils.toString(group.getProperty(UserConstants.PROP_MANAGERS_GROUP));
+      managersGroup = (Group) authorizableManager.findAuthorizable(managersGroupId);
     }
     return managersGroup;
   }
@@ -145,16 +142,17 @@ public class SakaiGroupProcessor extends AbstractAuthorizableProcessor implement
   /**
    * Inspired by Sling's AbstractCreateOperation ensureUniquePath.
    * @param startId
-   * @param userManager
+   * @param authorizableManager
    * @return
-   * @throws RepositoryException
+   * @throws AccessDeniedException
+   * @throws StorageClientException
    */
-  private String makeUniqueAuthorizableId(String startId, UserManager userManager) throws RepositoryException {
+  private String makeUniqueAuthorizableId(String startId, AuthorizableManager authorizableManager) throws AccessDeniedException, StorageClientException {
     String newAuthorizableId = startId;
     int idx = 0;
-    while (userManager.getAuthorizable(newAuthorizableId) != null) {
+    while (authorizableManager.findAuthorizable(newAuthorizableId) != null) {
       if (idx > 100) {
-        throw new RepositoryException("Too much contention on authorizable ID " + startId);
+        throw new StorageClientException("Too much contention on authorizable ID " + startId);
       } else {
         newAuthorizableId = startId + "_" + idx++;
       }
@@ -162,41 +160,43 @@ public class SakaiGroupProcessor extends AbstractAuthorizableProcessor implement
     return newAuthorizableId;
   }
 
-  private void updateManagersGroupMembership(Group group, Session session, Map<String, Object[]> parameters) throws RepositoryException {
-    UserManager userManager = AccessControlUtil.getUserManager(session);
-    Group managersGroup = getManagersGroup(group, userManager);
+  private void updateManagersGroupMembership(Group group, Session session, Map<String, Object[]> parameters)
+      throws AccessDeniedException, StorageClientException {
+    AuthorizableManager authorizableManager = session.getAuthorizableManager();
+    Group managersGroup = getManagersGroup(group, authorizableManager);
     if (managersGroup != null) {
       Object[] addValues = parameters.get(PARAM_ADD_TO_MANAGERS_GROUP);
       if ((addValues != null) && (addValues instanceof String[])) {
         for (String memberId : (String [])addValues) {
-          Authorizable authorizable = userManager.getAuthorizable(memberId);
+          Authorizable authorizable = authorizableManager.findAuthorizable(memberId);
           if (authorizable != null) {
-            managersGroup.addMember(authorizable);
+            managersGroup.addMember(memberId);
           } else {
-            LOGGER.warn("Could not add {} to managers group {}", memberId, managersGroup.getID());
+            LOGGER.warn("Could not add {} to managers group {}", memberId, managersGroup.getId());
           }
         }
       }
       Object[] removeValues = parameters.get(PARAM_REMOVE_FROM_MANAGERS_GROUP);
       if ((removeValues != null) && (removeValues instanceof String[])) {
         for (String memberId : (String [])removeValues) {
-          Authorizable authorizable = userManager.getAuthorizable(memberId);
+          Authorizable authorizable = authorizableManager.findAuthorizable(memberId);
           if (authorizable != null) {
-            managersGroup.removeMember(authorizable);
+            managersGroup.removeMember(memberId);
           } else {
-            LOGGER.warn("Could not remove {} from managers group {}", memberId, managersGroup.getID());
+            LOGGER.warn("Could not remove {} from managers group {}", memberId, managersGroup.getId());
           }
         }
       }
+      authorizableManager.updateAuthorizable(managersGroup);
     }
   }
 
-  private void deleteManagersGroup(Group group, Session session) throws RepositoryException {
-    UserManager userManager = AccessControlUtil.getUserManager(session);
-    Group managersGroup = getManagersGroup(group, userManager);
+  private void deleteManagersGroup(Group group, Session session) throws AccessDeniedException, StorageClientException {
+    AuthorizableManager authorizableManager = session.getAuthorizableManager();
+    Group managersGroup = getManagersGroup(group, authorizableManager);
     if (managersGroup != null) {
-      LOGGER.debug("Deleting managers group {} as part of deleting {}", managersGroup.getID(), group.getID());
-      managersGroup.remove();
+      LOGGER.debug("Deleting managers group {} as part of deleting {}", managersGroup.getId(), group.getId());
+      authorizableManager.delete(managersGroup.getId());
     }
   }
 }

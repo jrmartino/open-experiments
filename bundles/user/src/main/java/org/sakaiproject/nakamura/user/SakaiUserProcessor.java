@@ -17,15 +17,12 @@
  */
 package org.sakaiproject.nakamura.user;
 
-import org.apache.jackrabbit.api.security.user.Authorizable;
 import org.apache.sling.servlets.post.Modification;
-import org.apache.sling.servlets.post.ModificationType;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessor;
-import org.sakaiproject.nakamura.api.user.UserConstants;
 
 import java.util.Map;
-
-import javax.jcr.Session;
 
 /**
  * This class handles whatever processing is needed before the Jackrabbit User
@@ -34,15 +31,9 @@ import javax.jcr.Session;
 public class SakaiUserProcessor extends AbstractAuthorizableProcessor implements
     AuthorizablePostProcessor {
 
-  /**
-   * {@inheritDoc}
-   * @see org.sakaiproject.nakamura.api.user.AuthorizablePostProcessor#process(org.apache.jackrabbit.api.security.user.Authorizable, javax.jcr.Session, org.apache.sling.servlets.post.Modification, java.util.Map)
-   */
   public void process(Authorizable authorizable, Session session, Modification change,
       Map<String, Object[]> parameters) throws Exception {
-    if (change.getType() != ModificationType.DELETE) {
-      ensurePath(authorizable, session, UserConstants.USER_REPO_LOCATION);
-    }
+    // Currently empty but won't be for long.
   }
 
 }
