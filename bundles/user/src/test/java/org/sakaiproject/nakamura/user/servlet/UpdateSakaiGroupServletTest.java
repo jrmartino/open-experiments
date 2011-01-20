@@ -55,11 +55,7 @@ public class UpdateSakaiGroupServletTest extends AbstractEasyMockTest {
 
     UserManager userManager = createMock(UserManager.class);
 
-
     expect(session.getUserManager()).andReturn(userManager).anyTimes();
-
-
-
 
     expect(session.hasPendingChanges()).andReturn(true);
     session.save();
@@ -67,7 +63,6 @@ public class UpdateSakaiGroupServletTest extends AbstractEasyMockTest {
 
     ResourceResolver rr = createMock(ResourceResolver.class);
     expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
-
 
     Vector<String> params = new Vector<String>();
     HashMap<String, RequestParameter[]> rpm = new HashMap<String, RequestParameter[]>();
@@ -87,8 +82,9 @@ public class UpdateSakaiGroupServletTest extends AbstractEasyMockTest {
     expect(request.getParameterValues(":viewer@Delete")).andReturn(new String[] {});
     expect(request.getParameterValues(":viewer")).andReturn(new String[] {});
 
-    authorizablePostProcessService.process((Authorizable)EasyMock.anyObject(),(Session)EasyMock.anyObject(),
-        (ModificationType)EasyMock.anyObject(), (SlingHttpServletRequest)EasyMock.anyObject());
+    authorizablePostProcessService.process((Authorizable) EasyMock.anyObject(),
+        (Session) EasyMock.anyObject(), (ModificationType) EasyMock.anyObject(),
+        (SlingHttpServletRequest) EasyMock.anyObject());
     expectLastCall();
 
     HtmlResponse response = new HtmlResponse();
