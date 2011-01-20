@@ -17,13 +17,13 @@
  */
 package org.sakaiproject.nakamura.user.servlet;
 
-import org.apache.jackrabbit.api.security.user.Authorizable;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.resource.Resource;
+import org.apache.sling.api.resource.ResourceNotFoundException;
 import org.apache.sling.api.servlets.HtmlResponse;
-import org.apache.sling.jackrabbit.usermanager.impl.post.UpdateUserServlet;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
+import org.apache.sling.servlets.post.impl.helper.RequestProperty;
 import org.osgi.service.event.EventAdmin;
 import org.sakaiproject.nakamura.api.doc.BindingType;
 import org.sakaiproject.nakamura.api.doc.ServiceBinding;
@@ -33,6 +33,9 @@ import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceParameter;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
 import org.sakaiproject.nakamura.api.doc.ServiceSelector;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessService;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.util.osgi.EventUtils;
@@ -42,14 +45,14 @@ import org.slf4j.LoggerFactory;
 import java.util.Dictionary;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.Map;
 
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
 import javax.servlet.http.HttpServletResponse;
 
 /**
+ * TODO Update comments for Sparse port.
  * <p>
- * Sling Post Operation implementation for updating a user in the jackrabbit UserManager.
+ * Sling Post Operation implementation for updating a user in the Sparse UserManager.
  * </p>
  * <h2>Rest Service Description</h2>
  * <p>
@@ -119,7 +122,7 @@ import javax.servlet.http.HttpServletResponse;
           @ServiceResponse(code=500,description="Failure with HTML explanation.")}
         ))
 
-public class UpdateSakaiUserServlet extends UpdateUserServlet {
+public class UpdateSakaiUserServlet extends AbstractUserPostServlet {
 
   /**
    *
@@ -143,20 +146,39 @@ public class UpdateSakaiUserServlet extends UpdateUserServlet {
 
   /**
    * {@inheritDoc}
-   *
-   * @see org.apache.sling.jackrabbit.usermanager.post.CreateUserServlet#handleOperation(org.apache.sling.api.SlingHttpServletRequest,
-   *      org.apache.sling.api.servlets.HtmlResponse, java.util.List)
+   * @see org.sakaiproject.nakamura.user.servlet.AbstractAuthorizablePostServlet#handleOperation(org.apache.sling.api.SlingHttpServletRequest, org.apache.sling.api.servlets.HtmlResponse, java.util.List)
    */
   @Override
   protected void handleOperation(SlingHttpServletRequest request, HtmlResponse response,
-      List<Modification> changes) throws RepositoryException {
-    super.handleOperation(request, response, changes);
+      List<Modification> changes) {
+    Authorizable authorizable = null;
     Resource resource = request.getResource();
-    Authorizable authorizable = resource.adaptTo(Authorizable.class);
+    if (resource != null) {
+        authorizable = resource.adaptTo(Authorizable.class);
+    }
+
+    // check that the user was located.
+    if (authorizable == null) {
+        throw new ResourceNotFoundException(
+            "User to update could not be determined");
+    }
+
+    Session session = resource.adaptTo(Session.class);
+    final String userPath = authorizable.getId();
+    Map<String, RequestProperty> reqProperties = collectContent(request, response,
+        userPath);
+    response.setPath(userPath);
+    response.setLocation(userPath);
+    response.setParentLocation(userPath);
+    changes.add(Modification.onCreated(userPath));
+
     try {
-      Session session = request.getResourceResolver().adaptTo(Session.class);
-      postProcessorService.process(authorizable, session, ModificationType.MODIFY,
-          request);
+      writeContent(session, authorizable, reqProperties, changes);
+      final AuthorizableManager authorizableManager = session
+          .getAuthorizableManager();
+      authorizableManager.updateAuthorizable(authorizable);
+      postProcessorService
+          .process(authorizable, session, ModificationType.MODIFY, request);
     } catch (Exception e) {
       LOGGER.warn(e.getMessage(), e);
       response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
@@ -166,12 +188,12 @@ public class UpdateSakaiUserServlet extends UpdateUserServlet {
     // Launch an OSGi event for updating a user.
     try {
       Dictionary<String, String> properties = new Hashtable<String, String>();
-      properties.put(UserConstants.EVENT_PROP_USERID, authorizable.getID());
+      properties.put(UserConstants.EVENT_PROP_USERID, authorizable.getId());
       EventUtils
           .sendOsgiEvent(properties, UserConstants.TOPIC_USER_UPDATE, eventAdmin);
     } catch (Exception e) {
       // Trap all exception so we don't disrupt the normal behaviour.
-      LOGGER.error("Failed to launch an OSGi event for creating a user.", e);
+      LOGGER.error("Failed to launch an OSGi event for updating a user.", e);
     }
   }
 
