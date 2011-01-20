@@ -30,9 +30,16 @@ import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceParameter;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
 import org.sakaiproject.nakamura.api.doc.ServiceSelector;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.Session;
 import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
+
+import javax.servlet.http.HttpServletResponse;
 
 /**
  * Sling Post Operation implementation for updating the password of a user in the
@@ -94,12 +101,12 @@ import java.util.List;
     @ServiceResponse(code = 200, description = "Sucess sent with no body."),
     @ServiceResponse(code = 404, description = "User was not found."),
     @ServiceResponse(code = 500, description = "Failure with HTML explanation.") }))
-public class ChangeSakaiUserPasswordServlet extends ChangeUserPasswordServlet {
+public class ChangeSakaiUserPasswordServlet extends AbstractUserPostServlet {
 
-  /**
-   *
-   */
   private static final long serialVersionUID = 7178297046643735984L;
+
+  private static final Logger LOGGER = LoggerFactory
+      .getLogger(UpdateSakaiUserServlet.class);
 
   /*
    * (non-Javadoc)
@@ -110,7 +117,7 @@ public class ChangeSakaiUserPasswordServlet extends ChangeUserPasswordServlet {
    */
   @Override
   protected void handleOperation(SlingHttpServletRequest request,
-      HtmlResponse htmlResponse, List<Modification> changes) throws RepositoryException {
+      HtmlResponse htmlResponse, List<Modification> changes) {
     Authorizable authorizable = null;
     Resource resource = request.getResource();
     if (resource != null) {
@@ -118,32 +125,35 @@ public class ChangeSakaiUserPasswordServlet extends ChangeUserPasswordServlet {
     }
 
     // check that the user was located.
-    if (authorizable == null || authorizable.isGroup()) {
+    if (authorizable == null || Authorizable.isAGroup(authorizable.getSafeProperties())) {
       throw new ResourceNotFoundException("User to update could not be determined.");
     }
 
-    if ("anonymous".equals(authorizable.getID())) {
-      throw new RepositoryException("Can not change the password of the anonymous user.");
+    if ("anonymous".equals(authorizable.getId())) {
+      throw new ResourceNotFoundException(
+          "Can not change the password of the anonymous user.");
     }
 
-    final Session session = StorageClientUtils.adaptToSession(request
-        .getResourceResolver().adaptTo(javax.jcr.Session.class));
+    // Session session = resource.adaptTo(Session.class);
+    Session session = StorageClientUtils.adaptToSession(request.getResourceResolver()
+        .adaptTo(javax.jcr.Session.class));
     if (session == null) {
-      throw new RepositoryException("JCR Session not found");
+      throw new ResourceNotFoundException("JCR Session not found");
     }
 
     // check that the submitted parameter values have valid values.
     String oldPwd = request.getParameter("oldPwd");
     if (oldPwd == null || oldPwd.length() == 0) {
-      throw new RepositoryException("Old Password was not submitted");
+      throw new ResourceNotFoundException("Old Password was not submitted");
     }
     String newPwd = request.getParameter("newPwd");
     if (newPwd == null || newPwd.length() == 0) {
-      throw new RepositoryException("New Password was not submitted");
+      throw new ResourceNotFoundException("New Password was not submitted");
     }
     String newPwdConfirm = request.getParameter("newPwdConfirm");
     if (!newPwd.equals(newPwdConfirm)) {
-      throw new RepositoryException(
+      // TODO: Not the correct type of exception?
+      throw new ResourceNotFoundException(
           "New Password does not match the confirmation password");
     }
 
@@ -153,13 +163,22 @@ public class ChangeSakaiUserPasswordServlet extends ChangeUserPasswordServlet {
       // of the password is an out of bound agreement. :oldpassword is checked on
       // changePassword and then
       // cleared.
-      authorizable.setProperty(":oldpassword",
-          session.getValueFactory().createValue(digestPassword(oldPwd)));
-      ((User) authorizable).changePassword(digestPassword(newPwd));
+      // authorizable.setProperty(":oldpassword",
+      // session.getValueFactory().createValue(digestPassword(oldPwd)));
+      // ((User) authorizable).changePassword(digestPassword(newPwd));
+      //
+      // changes.add(Modification.onModified(resource.getPath() + "/rep:password"));
 
+      final AuthorizableManager authorizableManager = session.getAuthorizableManager();
+      authorizableManager.changePassword(authorizable, newPwd, oldPwd);
       changes.add(Modification.onModified(resource.getPath() + "/rep:password"));
-    } catch (RepositoryException re) {
-      throw new RepositoryException("Failed to change user password.", re);
+
+    } catch (Exception e) {
+      LOGGER.warn(e.getMessage(), e);
+      htmlResponse
+          .setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
+      return;
+      // throw new StorageClientException("Failed to change user password.", e);
     }
   }
 
