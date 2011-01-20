@@ -34,8 +34,14 @@ import org.sakaiproject.nakamura.api.doc.ServiceExtension;
 import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
 import org.sakaiproject.nakamura.api.doc.ServiceSelector;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
 import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
-import org.sakaiproject.nakamura.api.profile.ProfileService;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
+import org.sakaiproject.nakamura.api.profile.LiteProfileService;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.util.ExtendedJSONWriter;
 import org.slf4j.Logger;
@@ -77,7 +83,7 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
   private static final long serialVersionUID = 7976930178619974246L;
 
   @Reference
-  protected transient ProfileService profileService;
+  protected transient LiteProfileService profileService;
 
   static final String ITEMS = "items";
   static final String PAGE = "page";
@@ -97,7 +103,7 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
       authorizable = resource.adaptTo(Authorizable.class);
     }
 
-    if (authorizable == null || !authorizable.isGroup()) {
+    if (authorizable == null || !(authorizable instanceof Group)) {
       response.sendError(HttpServletResponse.SC_NO_CONTENT, "Couldn't find group");
       return;
     }
@@ -162,18 +168,18 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
           i++;
         } else {
           // profile wasn't found. safe to ignore and not include the group
-          logger.info("Profile not found for " + au.getID());
+          logger.info("Profile not found for " + au.getId());
         }
       }
       writer.endArray();
 
-    } catch (RepositoryException e) {
-      response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-          "Failed to retrieve members/managers.");
-      return;
     } catch (JSONException e) {
       response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
           "Failed to build a proper JSON output.");
+      return;
+    } catch (Throwable e) {
+      response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+          "Failed to retrieve members/managers.");
       return;
     }
 
@@ -202,21 +208,27 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
    * @param request
    * @param group
    * @param writer
-   * @throws RepositoryException
    * @throws JSONException
+   * @throws StorageClientException
+   * @throws AccessDeniedException
    */
   protected TreeMap<String, Authorizable> getMembers(SlingHttpServletRequest request,
-      Group group, Comparator<String> comparator) throws RepositoryException,
-      JSONException {
+      Group group, Comparator<String> comparator) throws JSONException,
+      AccessDeniedException, StorageClientException {
     TreeMap<String, Authorizable> map = new TreeMap<String, Authorizable>(comparator);
+
+    final Session session = StorageClientUtils.adaptToSession(request
+        .getResourceResolver().adaptTo(javax.jcr.Session.class));
+    final AuthorizableManager authorizableManager = session.getAuthorizableManager();
 
     // Only the direct members are required.
     // If we would do group.getMembers() that would also retrieve all the indirect ones.
-    Iterator<Authorizable> members = group.getDeclaredMembers();
-    while (members.hasNext()) {
-      Authorizable member = members.next();
-      String name = getName(member);
-      map.put(name, member);
+    if (group != null) {
+      for (final String id : group.getMembers()) {
+        final Authorizable member = authorizableManager.findAuthorizable(id);
+        String name = getName(member);
+        map.put(name, member);
+      }
     }
     return map;
   }
@@ -232,12 +244,13 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
    * @param request
    * @param group
    * @param writer
-   * @throws RepositoryException
    * @throws JSONException
+   * @throws StorageClientException
+   * @throws AccessDeniedException
    */
   protected TreeMap<String, Authorizable> getManagers(SlingHttpServletRequest request,
-      Group group, Comparator<String> comparator) throws RepositoryException,
-      JSONException {
+      Group group, Comparator<String> comparator) throws JSONException,
+      AccessDeniedException, StorageClientException {
     TreeMap<String, Authorizable> map = new TreeMap<String, Authorizable>(comparator);
 
     // KERN-949 will probably change this.
@@ -245,20 +258,21 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
     // group and may not apply.
     final Session session = StorageClientUtils.adaptToSession(request
         .getResourceResolver().adaptTo(javax.jcr.Session.class));
-    UserManager um = AccessControlUtil.getUserManager(session);
-    Value[] managersGroup = group.getProperty(UserConstants.PROP_MANAGERS_GROUP);
+    AuthorizableManager um = session.getAuthorizableManager();
+    String[] managersGroup = StorageClientUtils.toStringArray(group
+        .getProperty(UserConstants.PROP_MANAGERS_GROUP));
     if (managersGroup != null && managersGroup.length == 1) {
-      String mgrGroupName = managersGroup[0].getString();
+      String mgrGroupName = managersGroup[0];
 
-      Group mgrGroup = (Group) um.getAuthorizable(mgrGroupName);
+      Group mgrGroup = (Group) um.findAuthorizable(mgrGroupName);
 
-      Iterator<Authorizable> members = mgrGroup.getMembers();
-      while (members.hasNext()) {
-        Authorizable member = members.next();
-        String prinName = member.getPrincipal().getName();
-        Authorizable mau = um.getAuthorizable(prinName);
-        String name = getName(mau);
-        map.put(name, mau);
+      final String[] members = mgrGroup.getMembers();
+      if (members != null) {
+        for (final String member : members) {
+          final Authorizable mau = um.findAuthorizable(member);
+          final String name = getName(mau);
+          map.put(name, mau);
+        }
       }
     }
     return map;
@@ -272,23 +286,23 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
    * @param member
    *          The authorizable to get a name for.
    * @return The name.
-   * @throws RepositoryException
    */
-  private String getName(Authorizable member) throws RepositoryException {
-    String name = member.getID();
-    if (member.isGroup()) {
-      Value[] values = member.getProperty("sakai:group-title");
-      if (values != null && values.length != 0) {
-        name = values[0].getString();
+  private String getName(Authorizable member) {
+    String name = member.getId();
+    if (member instanceof Group) {
+      final String title = StorageClientUtils.toString(member
+          .getProperty("sakai:group-title"));
+      if (title != null) {
+        name = title;
       }
     } else {
-      Value[] values = member.getProperty("lastName");
-      if (values != null && values.length != 0) {
-        name = values[0].getString();
+      final String lastName = StorageClientUtils.toString(member.getProperty("lastName"));
+      if (lastName != null) {
+        name = lastName;
       }
     }
     // We need to add the ID to keep the keys unique.
-    return name + member.getID();
+    return name + member.getId();
   }
 
 }
