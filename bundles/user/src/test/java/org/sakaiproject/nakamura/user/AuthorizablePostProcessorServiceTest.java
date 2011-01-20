@@ -70,9 +70,9 @@ public class AuthorizablePostProcessorServiceTest {
   private static final String GROUP_ID = "faculty";
   private static final String USER_ID = "joe";
   private AuthorizablePostProcessServiceImpl authorizablePostProcessService;
-  private Session session;
-  private User user;
-  private Group group;
+  private static Session session;
+  private static User user;
+  private static Group group;
   @Mock
   SlingHttpServletRequest request;
   @Mock
@@ -81,10 +81,10 @@ public class AuthorizablePostProcessorServiceTest {
   SakaiUserProcessor sakaiUserProcessor;
   @Mock
   SakaiGroupProcessor sakaiGroupProcessor;
-  private RepositoryImpl repository;
+  private static RepositoryImpl repository;
 
   @BeforeClass
-  public void setUpClass() throws ClientPoolException, StorageClientException, AccessDeniedException, ClassNotFoundException {
+  public static void setUpClass() throws ClientPoolException, StorageClientException, AccessDeniedException, ClassNotFoundException {
     BaseMemoryRepository baseMemoryRepository = new BaseMemoryRepository();
     repository = baseMemoryRepository.getRepository();
     session = repository.loginAdministrative();
@@ -97,7 +97,7 @@ public class AuthorizablePostProcessorServiceTest {
   }
   
   @AfterClass
-  public void tearDown() throws ClientPoolException {
+  public static void tearDown() throws ClientPoolException {
     session.logout();
   }
 
