@@ -39,6 +39,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 
 /**
@@ -117,7 +118,7 @@ public class ChangeSakaiUserPasswordServlet extends AbstractUserPostServlet {
    */
   @Override
   protected void handleOperation(SlingHttpServletRequest request,
-      HtmlResponse htmlResponse, List<Modification> changes) {
+      HtmlResponse htmlResponse, List<Modification> changes) throws ServletException {
     Authorizable authorizable = null;
     Resource resource = request.getResource();
     if (resource != null) {
@@ -125,36 +126,34 @@ public class ChangeSakaiUserPasswordServlet extends AbstractUserPostServlet {
     }
 
     // check that the user was located.
-    if (authorizable == null || Authorizable.isAGroup(authorizable.getSafeProperties())) {
-      throw new ResourceNotFoundException("User to update could not be determined.");
+    if (authorizable == null
+        || authorizable instanceof org.sakaiproject.nakamura.api.lite.authorizable.Group) {
+      throw new ServletException("User to update could not be determined.");
     }
 
     if ("anonymous".equals(authorizable.getId())) {
-      throw new ResourceNotFoundException(
-          "Can not change the password of the anonymous user.");
+      throw new ServletException("Can not change the password of the anonymous user.");
     }
 
     // Session session = resource.adaptTo(Session.class);
     Session session = StorageClientUtils.adaptToSession(request.getResourceResolver()
         .adaptTo(javax.jcr.Session.class));
     if (session == null) {
-      throw new ResourceNotFoundException("JCR Session not found");
+      throw new ServletException("JCR Session not found");
     }
 
     // check that the submitted parameter values have valid values.
     String oldPwd = request.getParameter("oldPwd");
     if (oldPwd == null || oldPwd.length() == 0) {
-      throw new ResourceNotFoundException("Old Password was not submitted");
+      throw new ServletException("Old Password was not submitted");
     }
     String newPwd = request.getParameter("newPwd");
     if (newPwd == null || newPwd.length() == 0) {
-      throw new ResourceNotFoundException("New Password was not submitted");
+      throw new ServletException("New Password was not submitted");
     }
     String newPwdConfirm = request.getParameter("newPwdConfirm");
     if (!newPwd.equals(newPwdConfirm)) {
-      // TODO: Not the correct type of exception?
-      throw new ResourceNotFoundException(
-          "New Password does not match the confirmation password");
+      throw new ServletException("New Password does not match the confirmation password");
     }
 
     try {
@@ -178,7 +177,6 @@ public class ChangeSakaiUserPasswordServlet extends AbstractUserPostServlet {
       htmlResponse
           .setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
       return;
-      // throw new StorageClientException("Failed to change user password.", e);
     }
   }
 
