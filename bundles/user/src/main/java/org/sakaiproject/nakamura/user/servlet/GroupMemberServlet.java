@@ -41,7 +41,7 @@ import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
 import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
 import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
 import org.sakaiproject.nakamura.api.lite.authorizable.Group;
-import org.sakaiproject.nakamura.api.profile.ProfileService;
+import org.sakaiproject.nakamura.api.profile.LiteProfileService;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.util.ExtendedJSONWriter;
 import org.slf4j.Logger;
@@ -83,7 +83,7 @@ public class GroupMemberServlet extends SlingSafeMethodsServlet {
   private static final long serialVersionUID = 7976930178619974246L;
 
   @Reference
-  protected transient ProfileService profileService;
+  protected transient LiteProfileService profileService;
 
   static final String ITEMS = "items";
   static final String PAGE = "page";
