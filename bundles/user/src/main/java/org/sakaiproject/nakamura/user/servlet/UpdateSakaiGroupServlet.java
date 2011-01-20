@@ -38,7 +38,11 @@ import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceParameter;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
 import org.sakaiproject.nakamura.api.doc.ServiceSelector;
+import org.sakaiproject.nakamura.api.lite.Repository;
+import org.sakaiproject.nakamura.api.lite.Session;
 import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessService;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.util.osgi.EventUtils;
@@ -50,6 +54,7 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 
 /**
@@ -146,7 +151,7 @@ public class UpdateSakaiGroupServlet extends AbstractSakaiGroupPostServlet {
    * 
    * @scr.reference
    */
-  private transient SlingRepository repository;
+  private transient Repository repository;
 
   /**
    * Used to launch OSGi events.
@@ -156,7 +161,7 @@ public class UpdateSakaiGroupServlet extends AbstractSakaiGroupPostServlet {
   protected transient EventAdmin eventAdmin;
 
   /** Returns the JCR repository used by this service. */
-  protected SlingRepository getRepository() {
+  protected Repository getRepository() {
     return repository;
   }
 
@@ -168,7 +173,7 @@ public class UpdateSakaiGroupServlet extends AbstractSakaiGroupPostServlet {
    */
   @Override
   protected void handleOperation(SlingHttpServletRequest request,
-      HtmlResponse htmlResponse, List<Modification> changes) throws RepositoryException {
+      HtmlResponse htmlResponse, List<Modification> changes) throws ServletException {
 
     Authorizable authorizable = null;
     Resource resource = request.getResource();
@@ -184,11 +189,11 @@ public class UpdateSakaiGroupServlet extends AbstractSakaiGroupPostServlet {
     final Session session = StorageClientUtils.adaptToSession(request
         .getResourceResolver().adaptTo(javax.jcr.Session.class));
     if (session == null) {
-      throw new RepositoryException("JCR Session not found");
+      throw new ServletException("JCR Session not found");
     }
     try {
-      String groupPath = AuthorizableResourceProvider.SYSTEM_USER_MANAGER_GROUP_PREFIX
-          + authorizable.getID();
+      String groupPath = UserConstants.SYSTEM_USER_MANAGER_GROUP_PREFIX
+          + authorizable.getId();
 
       Map<String, RequestProperty> reqProperties = collectContent(request, htmlResponse,
           groupPath);
@@ -212,12 +217,12 @@ public class UpdateSakaiGroupServlet extends AbstractSakaiGroupPostServlet {
         writeContent(session, authorizable, reqProperties, changes);
 
         // update the group memberships
-        if (authorizable.isGroup()) {
+        if (authorizable instanceof Group) {
           updateGroupMembership(request, authorizable, changes);
           updateOwnership(request, (Group) authorizable, new String[0], changes);
         }
-      } catch (RepositoryException re) {
-        throw new RepositoryException("Failed to update group.", re);
+      } catch (ServletException re) {
+        throw new ServletException("Failed to update group.", re);
       }
 
       try {
@@ -231,14 +236,14 @@ public class UpdateSakaiGroupServlet extends AbstractSakaiGroupPostServlet {
         return;
       }
 
-      if (session.hasPendingChanges()) {
-        session.save();
+      if (authorizable.isModified()) {
+        session.getAuthorizableManager().updateAuthorizable(authorizable);
       }
 
       // Launch an OSGi event for updating a group.
       try {
         Dictionary<String, String> properties = new Hashtable<String, String>();
-        properties.put(UserConstants.EVENT_PROP_USERID, authorizable.getID());
+        properties.put(UserConstants.EVENT_PROP_USERID, authorizable.getId());
         EventUtils.sendOsgiEvent(properties, UserConstants.TOPIC_GROUP_CREATED,
             eventAdmin);
       } catch (Exception e) {
@@ -248,22 +253,22 @@ public class UpdateSakaiGroupServlet extends AbstractSakaiGroupPostServlet {
 
     } catch (Throwable t) {
       LOGGER.debug("Failed " + t.getMessage(), t);
-      throw new RepositoryException(t.getMessage(), t);
+      throw new ServletException(t.getMessage(), t);
     }
   }
 
   /**
    * @param slingRepository
    */
-  protected void bindRepository(SlingRepository slingRepository) {
-    this.repository = slingRepository;
+  protected void bindRepository(Repository repository) {
+    this.repository = repository;
 
   }
 
   /**
    * @param slingRepository
    */
-  protected void unbindRepository(SlingRepository slingRepository) {
+  protected void unbindRepository(Repository repository) {
     this.repository = null;
 
   }

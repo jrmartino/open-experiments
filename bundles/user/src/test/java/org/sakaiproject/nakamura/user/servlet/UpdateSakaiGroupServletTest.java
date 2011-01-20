@@ -1,103 +1,158 @@
+/*
+ * Licensed to the Sakai Foundation (SF) under one
+ * or more contributor license agreements. See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership. The SF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License. You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 package org.sakaiproject.nakamura.user.servlet;
 
-import static org.easymock.EasyMock.expect;
-import static org.easymock.EasyMock.expectLastCall;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-import org.apache.jackrabbit.api.JackrabbitSession;
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.Group;
-import org.apache.jackrabbit.api.security.user.UserManager;
+import com.google.common.collect.ImmutableMap;
+
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.request.RequestParameter;
 import org.apache.sling.api.request.RequestParameterMap;
 import org.apache.sling.api.resource.Resource;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.api.servlets.HtmlResponse;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
-import org.easymock.EasyMock;
+import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.runners.MockitoJUnitRunner;
+import org.sakaiproject.nakamura.api.lite.ClientPoolException;
+import org.sakaiproject.nakamura.api.lite.Repository;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.SessionAdaptable;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
+import org.sakaiproject.nakamura.api.lite.authorizable.User;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessService;
 import org.sakaiproject.nakamura.api.user.UserConstants;
-import org.sakaiproject.nakamura.testutils.easymock.AbstractEasyMockTest;
+import org.sakaiproject.nakamura.lite.BaseMemoryRepository;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Vector;
 
-import javax.jcr.Session;
+@RunWith(MockitoJUnitRunner.class)
+public class UpdateSakaiGroupServletTest {
+  private static final String USER_ID = "lance";
+  private static final String PASSWORD = "password";
+  private static final String GROUP_ID = "g-foo";
+  private Session adminSession;
+  private AuthorizableManager adminAuthorizableManager;
+  private User adminUser;
+  private Session userSession;
+  private User user;
+  private Repository repository;
+  private UpdateSakaiGroupServlet updateSakaiGroupServlet;
+  @Mock
+  private SlingHttpServletRequest request;
+  @Mock
+  private ResourceResolver resourceResolver;
+  private List<Modification> changes = new ArrayList<Modification>();
+  private Group group;
+  @Mock
+  AuthorizablePostProcessService authorizablePostProcessService;
 
-public class UpdateSakaiGroupServletTest extends AbstractEasyMockTest {
+  @Before
+  public void setup() throws ClientPoolException, StorageClientException,
+      AccessDeniedException, ClassNotFoundException {
+    BaseMemoryRepository baseMemoryRepository = new BaseMemoryRepository();
+    repository = baseMemoryRepository.getRepository();
+    assertNotNull(repository);
+    adminSession = repository.loginAdministrative();
+    assertNotNull(adminSession);
+    adminAuthorizableManager = adminSession.getAuthorizableManager();
+    assertNotNull(adminAuthorizableManager);
+
+    adminUser = (User) adminAuthorizableManager
+        .findAuthorizable(UserConstants.ADMIN_USERID);
+    assertNotNull(adminUser);
+
+    assertTrue(adminAuthorizableManager.createGroup(GROUP_ID, "Group Name",
+        ImmutableMap.of("x", (Object) "y")));
+    group = (Group) adminAuthorizableManager.findAuthorizable(GROUP_ID);
+    assertNotNull(group);
+
+    assertTrue(adminAuthorizableManager.createUser(USER_ID, "Lance Speelmon", PASSWORD,
+        ImmutableMap.of("x", (Object) "y")));
+    user = (User) adminAuthorizableManager.findAuthorizable(USER_ID);
+    assertNotNull(user);
+    userSession = repository.login(USER_ID, PASSWORD);
+    assertNotNull(userSession);
+    assertEquals(USER_ID, userSession.getUserId());
+
+    when(request.getRemoteUser()).thenReturn(UserConstants.ADMIN_USERID);
+
+    javax.jcr.Session adaptable = mock(javax.jcr.Session.class, Mockito.withSettings()
+        .extraInterfaces(SessionAdaptable.class));
+    when(((SessionAdaptable) adaptable).getSession()).thenReturn(adminSession);
+    when(request.getResourceResolver()).thenReturn(resourceResolver);
+    when(resourceResolver.adaptTo(javax.jcr.Session.class)).thenReturn(adaptable);
+
+    updateSakaiGroupServlet = new UpdateSakaiGroupServlet();
+    updateSakaiGroupServlet.bindRepository(repository);
+  }
 
   @Test
   public void testHandleOperation() throws Exception {
-    UpdateSakaiGroupServlet usgs = new UpdateSakaiGroupServlet();
-
-    ArrayList<Modification> changes = new ArrayList<Modification>();
-
-    Group authorizable = createMock(Group.class);
-    SlingRepository slingRepository = createMock(SlingRepository.class);
-    usgs.bindRepository(slingRepository);
-    JackrabbitSession session = createMock(JackrabbitSession.class);
-    AuthorizablePostProcessService authorizablePostProcessService = createMock(AuthorizablePostProcessService.class);
-
-    expect(authorizable.isGroup()).andReturn(true).times(2);
-    expect(authorizable.getID()).andReturn("g-foo").anyTimes();
-    expect(authorizable.hasProperty(UserConstants.PROP_GROUP_MANAGERS)).andReturn(false);
-    expect(authorizable.hasProperty(UserConstants.PROP_MANAGERS_GROUP)).andReturn(false);
-    expect(authorizable.hasProperty(UserConstants.PROP_MANAGED_GROUP)).andReturn(false);
-    expect(authorizable.hasProperty(UserConstants.PROP_GROUP_VIEWERS)).andReturn(false);
-    expect(authorizable.hasProperty(UserConstants.PROP_JOINABLE_GROUP)).andReturn(false);
-
-    Resource resource = createMock(Resource.class);
-    expect(resource.adaptTo(Authorizable.class)).andReturn(authorizable);
-
-    UserManager userManager = createMock(UserManager.class);
-
-
-    expect(session.getUserManager()).andReturn(userManager).anyTimes();
-
-
-
-
-    expect(session.hasPendingChanges()).andReturn(true);
-    session.save();
-    expectLastCall();
-
-    ResourceResolver rr = createMock(ResourceResolver.class);
-    expect(rr.adaptTo(Session.class)).andReturn(session).anyTimes();
-
+    Resource resource = mock(Resource.class);
+    when(resource.adaptTo(Authorizable.class)).thenReturn(group);
 
     Vector<String> params = new Vector<String>();
     HashMap<String, RequestParameter[]> rpm = new HashMap<String, RequestParameter[]>();
 
-    RequestParameterMap requestParameterMap = createMock(RequestParameterMap.class);
-    expect(requestParameterMap.entrySet()).andReturn(rpm.entrySet());
+    RequestParameterMap requestParameterMap = mock(RequestParameterMap.class);
+    when(requestParameterMap.entrySet()).thenReturn(rpm.entrySet());
 
-    SlingHttpServletRequest request = createMock(SlingHttpServletRequest.class);
-    expect(request.getResource()).andReturn(resource).times(2);
-    expect(request.getResourceResolver()).andReturn(rr).times(2);
-    expect(request.getParameterNames()).andReturn(params.elements());
-    expect(request.getRequestParameterMap()).andReturn(requestParameterMap);
-    expect(request.getParameterValues(":member@Delete")).andReturn(new String[] {});
-    expect(request.getParameterValues(":member")).andReturn(new String[] {});
-    expect(request.getParameterValues(":manager@Delete")).andReturn(new String[] {});
-    expect(request.getParameterValues(":manager")).andReturn(new String[] {});
-    expect(request.getParameterValues(":viewer@Delete")).andReturn(new String[] {});
-    expect(request.getParameterValues(":viewer")).andReturn(new String[] {});
+    when(request.getResource()).thenReturn(resource);
+    when(request.getParameterNames()).thenReturn(params.elements());
+    when(request.getRequestParameterMap()).thenReturn(requestParameterMap);
+    when(request.getParameterValues(":member@Delete")).thenReturn(new String[] {});
+    when(request.getParameterValues(":member")).thenReturn(new String[] {});
+    when(request.getParameterValues(":manager@Delete")).thenReturn(new String[] {});
+    when(request.getParameterValues(":manager")).thenReturn(new String[] {});
+    when(request.getParameterValues(":viewer@Delete")).thenReturn(new String[] {});
+    when(request.getParameterValues(":viewer")).thenReturn(new String[] {});
 
-    authorizablePostProcessService.process((Authorizable)EasyMock.anyObject(),(Session)EasyMock.anyObject(),
-        (ModificationType)EasyMock.anyObject(), (SlingHttpServletRequest)EasyMock.anyObject());
-    expectLastCall();
+    HtmlResponse response = mock(HtmlResponse.class);
 
-    HtmlResponse response = new HtmlResponse();
+    updateSakaiGroupServlet.postProcessorService = authorizablePostProcessService;
+    updateSakaiGroupServlet.handleOperation(request, response, changes);
 
-    replay();
-
-    usgs.postProcessorService = authorizablePostProcessService;
-    usgs.handleOperation(request, response, changes);
-
-    verify();
+    verify(request, times(2)).getResource();
+    verify(request, times(3)).getResourceResolver();
+    verify(authorizablePostProcessService).process(any(Authorizable.class),
+        any(Session.class), eq(ModificationType.MODIFY),
+        any(SlingHttpServletRequest.class));
   }
 }
