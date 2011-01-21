@@ -21,6 +21,7 @@ import static org.sakaiproject.nakamura.api.personal.PersonalConstants.PROFILE_J
 
 import org.apache.sling.jcr.contentloader.ContentImporter;
 import org.apache.sling.jcr.contentloader.ImportOptions;
+import org.sakaiproject.nakamura.api.lite.content.Content;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,13 +66,13 @@ public class ProfileImporter {
 
   /**
    * Import a profile using a parameter provided in the request.
-   * @param profileNode
+   * @param profileContent
    * @param parameters
    * @param contentImporter
    * @param session
    * @param defaultJson
    */
-  public static void importFromParameters(Node profileNode, Map<String, Object[]> parameters, ContentImporter contentImporter,
+  public static void importFromParameters(Content profileContent, Map<String, Object[]> parameters, ContentImporter contentImporter,
       Session session, String defaultJson) {
     String json = defaultJson;
     Object[] profileParameterValues = parameters.get(PROFILE_JSON_IMPORT_PARAMETER);
@@ -87,19 +88,19 @@ public class ProfileImporter {
 
     if (json != null) {
       try {
-        importFromJsonString(profileNode, json, contentImporter, session);
+        importFromJsonString(profileContent, json, contentImporter, session);
       } catch (RepositoryException e) {
-        LOGGER.error("Unable to import content for profile node " + profileNode, e);
+        LOGGER.error("Unable to import content for profile node " + profileContent, e);
       } catch (IOException e) {
-        LOGGER.error("Unable to import content for profile node " + profileNode, e);
+        LOGGER.error("Unable to import content for profile node " + profileContent, e);
       }
     }
   }
 
-  private static void importFromJsonString(Node profileNode, String json, ContentImporter contentImporter,
+  private static void importFromJsonString(Content profileContent, String json, ContentImporter contentImporter,
       Session session) throws RepositoryException, IOException {
     ByteArrayInputStream contentStream = new ByteArrayInputStream(json.getBytes());
-    contentImporter.importContent(profileNode, CONTENT_ROOT_NAME, contentStream, importOptions, null);
-    LOGGER.debug("Imported content to {} from JSON string '{}'", profileNode.getPath(), json);
+    contentImporter.importContent(profileContent, CONTENT_ROOT_NAME, contentStream, importOptions, null);
+    LOGGER.debug("Imported content to {} from JSON string '{}'", profileContent.getPath(), json);
   }
 }
