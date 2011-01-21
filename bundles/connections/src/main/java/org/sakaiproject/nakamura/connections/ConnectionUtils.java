@@ -24,6 +24,8 @@ import org.apache.jackrabbit.api.security.user.Authorizable;
 import org.sakaiproject.nakamura.util.PathUtils;
 import org.sakaiproject.nakamura.util.PersonalUtils;
 
+import javax.jcr.RepositoryException;
+
 /**
  * Simple utils which help us when working with connections
  * 
@@ -83,7 +85,11 @@ public class ConnectionUtils {
    *         /_user/j/jo/joh/john/johndoe/contacts
    */
   public static String getConnectionPathBase(Authorizable au) {
-    return PersonalUtils.getHomePath(au) + "/" + CONTACT_STORE_NAME;
+    try {
+      return PersonalUtils.getHomePath(au.getID()) + "/" + CONTACT_STORE_NAME;
+    } catch (RepositoryException e) {
+      return null;
+    }
   }
 
 }

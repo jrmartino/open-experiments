@@ -361,7 +361,7 @@ public class SolrSearchServlet extends SlingSafeMethodsServlet {
     try {
       UserManager um = AccessControlUtil.getUserManager(session);
       Authorizable au = um.getAuthorizable(userId);
-      String userPrivatePath = PersonalUtils.getPrivatePath(au);
+      String userPrivatePath = PersonalUtils.getPrivatePath(au.getID());
       propertiesMap.put("_userPrivatePath", userPrivatePath);
     } catch (RepositoryException e) {
       LOGGER.error("Unable to get the authorizable for this user.", e);

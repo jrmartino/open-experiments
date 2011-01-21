@@ -17,11 +17,12 @@
  */
 package org.sakaiproject.nakamura.api.user;
 
+import org.apache.jackrabbit.api.security.user.Authorizable;
 import org.apache.sling.servlets.post.Modification;
-import org.sakaiproject.nakamura.api.lite.Session;
-import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
 
 import java.util.Map;
+
+import javax.jcr.Session;
 
 /**
  *
@@ -39,7 +40,8 @@ public interface AuthorizablePostProcessor {
    *        the processing service sees fit
    * @throws Exception
    */
-  void process(Authorizable authorizable, Session session, Modification change, Map<String, Object[]> parameters)
+  void process(Authorizable authorizable, Session session, Modification change,
+      Map<String, Object[]> parameters)
       throws Exception;
 
 }

@@ -693,7 +693,7 @@ public class SearchServlet extends SlingSafeMethodsServlet {
     try {
       UserManager um = AccessControlUtil.getUserManager(session);
       Authorizable au = um.getAuthorizable(userId);
-      String userPrivatePath = "/jcr:root" + PersonalUtils.getPrivatePath(au);
+      String userPrivatePath = "/jcr:root" + PersonalUtils.getPrivatePath(au.getID());
       propertiesMap.put("_userPrivatePath", ISO9075.encodePath(userPrivatePath));
     } catch (RepositoryException e) {
       LOGGER.error("Unable to get the authorizable for this user.", e);

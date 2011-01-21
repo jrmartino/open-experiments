@@ -15,25 +15,31 @@
  * KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
-package org.sakaiproject.nakamura.user;
+package org.sakaiproject.nakamura.api.user;
 
 import org.apache.sling.servlets.post.Modification;
 import org.sakaiproject.nakamura.api.lite.Session;
 import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
-import org.sakaiproject.nakamura.api.user.SparseAuthorizablePostProcessor;
 
 import java.util.Map;
 
 /**
- * This class handles whatever processing is needed before the Jackrabbit User
- * modification can be sent to other AuthorizablePostProcessor services.
+ *
  */
-public class SakaiUserProcessor extends AbstractAuthorizableProcessor implements
-SparseAuthorizablePostProcessor {
+public interface SparseAuthorizablePostProcessor {
 
-  public void process(Authorizable authorizable, Session session, Modification change,
-      Map<String, Object[]> parameters) throws Exception {
-    // Currently empty but won't be for long.
-  }
+  /**
+   * Method which will be called after a Sakai user or group has been created or modified,
+   * and before the Sakai user or group is deleted.
+   *
+   * @param authorizable
+   * @param session
+   * @param change describes what sort of change has occurred (or is about to occur)
+   * @param parameters a map of non-persisted optional properties for whatever use
+   *        the processing service sees fit
+   * @throws Exception
+   */
+  void process(Authorizable authorizable, Session session, Modification change, Map<String, Object[]> parameters)
+      throws Exception;
 
 }

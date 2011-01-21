@@ -34,6 +34,7 @@ import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
 import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
 import org.sakaiproject.nakamura.api.lite.authorizable.Group;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessor;
+import org.sakaiproject.nakamura.api.user.SparseAuthorizablePostProcessor;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,7 +50,7 @@ import java.util.Set;
  * can be sent to other AuthorizablePostProcessor services.
  */
 public class SakaiGroupProcessor extends AbstractAuthorizableProcessor implements
-    AuthorizablePostProcessor {
+SparseAuthorizablePostProcessor {
   private static final Logger LOGGER = LoggerFactory.getLogger(SakaiGroupProcessor.class);
   public static final String PARAM_ADD_TO_MANAGERS_GROUP = SlingPostConstants.RP_PREFIX + "sakai:manager";
   public static final String PARAM_REMOVE_FROM_MANAGERS_GROUP = PARAM_ADD_TO_MANAGERS_GROUP + SlingPostConstants.SUFFIX_DELETE;

@@ -223,7 +223,7 @@ public class HomePostProcessor implements AuthorizablePostProcessor {
    */
   private Node createPrivate(Session session, Authorizable authorizable)
       throws RepositoryException {
-    String privatePath = PersonalUtils.getPrivatePath(authorizable);
+    String privatePath = PersonalUtils.getPrivatePath(authorizable.getID());
     if (session.itemExists(privatePath)) {
       return session.getNode(privatePath);
     }
@@ -288,7 +288,7 @@ public class HomePostProcessor implements AuthorizablePostProcessor {
    */
   private Node createPublic(Session session, Authorizable athorizable)
       throws RepositoryException {
-    String publicPath = PersonalUtils.getPublicPath(athorizable);
+    String publicPath = PersonalUtils.getPublicPath(athorizable.getID());
     if (session.nodeExists(publicPath)) {
       // No more work needed at present.
       return session.getNode(publicPath);

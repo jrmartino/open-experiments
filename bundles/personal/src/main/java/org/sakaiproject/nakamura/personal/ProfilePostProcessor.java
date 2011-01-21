@@ -44,6 +44,7 @@ import org.apache.sling.jcr.contentloader.ContentImporter;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessor;
+import org.sakaiproject.nakamura.api.user.SparseAuthorizablePostProcessor;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.util.JcrUtils;
 import org.sakaiproject.nakamura.util.PersonalUtils;
@@ -69,12 +70,12 @@ import java.util.Set;
 //import javax.jcr.version.VersionException;
 
 @Component(immediate = true, metatype = true)
-@Service(value = AuthorizablePostProcessor.class)
+@Service(value = SparseAuthorizablePostProcessor.class)
 @Properties(value = {
     @org.apache.felix.scr.annotations.Property(name = "service.vendor", value = "The Sakai Foundation"),
     @org.apache.felix.scr.annotations.Property(name = "service.description", value = "Post Processes profiles for User and Group operations"),
     @org.apache.felix.scr.annotations.Property(name = "service.ranking", intValue = 1) })
-public class ProfilePostProcessor implements AuthorizablePostProcessor {
+public class ProfilePostProcessor implements SparseAuthorizablePostProcessor {
 
   private static final Logger LOGGER = LoggerFactory
       .getLogger(ProfilePostProcessor.class);

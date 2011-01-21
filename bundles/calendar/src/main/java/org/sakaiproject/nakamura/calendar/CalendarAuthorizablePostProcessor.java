@@ -36,6 +36,7 @@ import org.sakaiproject.nakamura.api.lite.accesscontrol.AclModification.Operatio
 import org.sakaiproject.nakamura.api.lite.accesscontrol.Permissions;
 import org.sakaiproject.nakamura.api.lite.accesscontrol.Security;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessor;
+import org.sakaiproject.nakamura.api.user.SparseAuthorizablePostProcessor;
 import org.sakaiproject.nakamura.util.PersonalUtils;
 
 import java.util.Map;
@@ -47,7 +48,7 @@ import java.util.Map;
 @Component(immediate = true)
 @Properties(value = {
     @Property(name = "service.ranking", intValue=10)})
-public class CalendarAuthorizablePostProcessor implements AuthorizablePostProcessor {
+public class CalendarAuthorizablePostProcessor implements SparseAuthorizablePostProcessor {
   @Reference
   protected transient CalendarService calendarService;
 
