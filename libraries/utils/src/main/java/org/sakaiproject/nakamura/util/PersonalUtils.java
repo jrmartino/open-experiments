@@ -17,9 +17,6 @@
  */
 package org.sakaiproject.nakamura.util;
 
-//import org.apache.jackrabbit.api.security.principal.ItemBasedPrincipal;
-//import org.apache.jackrabbit.api.security.user.Authorizable;
-//import org.apache.jackrabbit.api.security.user.UserManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,8 +26,8 @@ import javax.jcr.Value;
 
 import org.sakaiproject.nakamura.api.lite.Session;
 import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
 import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
-import org.sakaiproject.nakamura.api.lite.authorizable.Group;
 import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
 
 /**
@@ -44,20 +41,10 @@ public class PersonalUtils {
   public static final String PROP_EMAIL_ADDRESS = "email";
   
   /**
-   * The base location of the user space.
-   */
-  public static final String PATH_USER = "/_user";
-
-  /**
    * The base location for the Home space. 
    */
   public static final String PATH_HOME = "a:";
   
-  /**
-   * The base location of the group space.
-   */
-  public static final String PATH_GROUP = "/_group";
-
   /**
    * The node name of the authentication profile in public space.
    */
@@ -87,34 +74,11 @@ public class PersonalUtils {
    * @throws RepositoryException
    */
   public static String getUserHashedPath(Authorizable au) {
-    String hash = null;
-    if (au.hasProperty("path")) {
-      hash = (String) au.getProperty("path");
-      //hash = au.getProperty("path")[0].getString();
-    } else {
-      LOGGER
-          .debug(
-              "Authorizable {} has no path property set on it, grabbing path from the Authorizable ID!",
-              au);
-      //Principal p = au.getPrincipal();
-      hash = au.getId();
-      /*
-      if (p instanceof ItemBasedPrincipal) {
-        ItemBasedPrincipal principal = (ItemBasedPrincipal) p;
-        hash = principal.getPath();
-      } else if (p.getName().equals("admin")) {
-        hash = "a/ad/admin/";
-      } else if (p.getName().equals("anonymous")) {
-        hash = "a/an/anonymous/";
+      if ( au.hasProperty("path")) {
+        return StorageClientUtils.toString(au.getProperty("path"));
       } else {
-        String n = org.apache.commons.lang.StringUtils.leftPad(p.getName(), 5, '_');
-        hash = n.substring(0, 1) + "/" + n.substring(0, 2) + "/" + n.substring(0, 3)
-            + "/" + n + "/";
+        return PATH_HOME+au.getId();
       }
-      */
-      
-    }
-    return hash;
   }
 
   public static String getPrimaryEmailAddress(Node profileNode)
@@ -159,6 +123,9 @@ public class PersonalUtils {
   public static String getProfilePath(Authorizable au) {
     return getPublicPath(au) + "/" + PATH_AUTH_PROFILE;
   }
+  public static String getProfilePath(String au) {
+    return getPublicPath(au) + "/" + PATH_AUTH_PROFILE;
+  }
 
   /**
    * @param au
@@ -166,6 +133,10 @@ public class PersonalUtils {
    * @return The absolute path in JCR to the private folder in the user his home folder.
    */
   public static String getPrivatePath(Authorizable au) {
+    return getHomePath(au) + "/" + PATH_PRIVATE;
+  }
+
+  public static String getPrivatePath(String au) {
     return getHomePath(au) + "/" + PATH_PRIVATE;
   }
 
@@ -178,6 +149,10 @@ public class PersonalUtils {
     return getHomePath(au) + "/" + PATH_PUBLIC;
   }
 
+  public static String getPublicPath(String au) {
+    return getHomePath(au) + "/" + PATH_PUBLIC;
+  }
+
   /**
    * Get the home folder for an authorizable. If the authorizable is a user, this might
    * return: a:userId
@@ -187,14 +162,16 @@ public class PersonalUtils {
    * @return The absolute path in Sparse to the home folder for an authorizable.
    */
   public static String getHomePath(Authorizable au) {
-    String folder = PathUtils.getSubPath(au);
-    if (au != null && au instanceof Group) {
-      folder = PATH_GROUP + folder;
-    } else {
-      // Assume this is a user.
-      folder = PATH_HOME + folder;
+    if ( au != null ) {
+      return PATH_HOME+au.getId();
     }
-    return PathUtils.normalizePath(folder);
+    return null;
+  }
+  public static String getHomePath(String userId) {
+    if ( userId != null ) {
+      return PATH_HOME+userId;
+    }
+    return null;
   }
 
   /**
@@ -205,6 +182,7 @@ public class PersonalUtils {
    * @return An authorizable that represents a person.
    * @throws StorageClientException
    */
+  // TODO: review this as it hides the AccessDeniedException. I think this is dangerous ieb - 20110121
   public static Authorizable getAuthorizable(Session session, String id)
       throws StorageClientException {
     Authorizable authorizable = null;
