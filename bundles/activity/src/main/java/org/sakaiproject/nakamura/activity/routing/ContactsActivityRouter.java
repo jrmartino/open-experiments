@@ -108,7 +108,7 @@ public class ContactsActivityRouter implements ActivityRouter {
           if (allowCopy) {
             // Get the activity feed for this contact and deliver it.
             Authorizable au = um.getAuthorizable(connection);
-            activityFeedPath = ActivityUtils.getUserFeed(au);
+            activityFeedPath = ActivityUtils.getUserFeed(au.getID());
             ActivityRoute route = new AbstractActivityRoute(activityFeedPath) {
             };
             routes.add(route);

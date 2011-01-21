@@ -67,7 +67,7 @@ public class PersonalActivityRouter implements ActivityRouter {
           .getString();
       UserManager um = AccessControlUtil.getUserManager(activity.getSession());
       Authorizable au = um.getAuthorizable(actor);
-      String path = ActivityUtils.getUserFeed(au);
+      String path = ActivityUtils.getUserFeed(au.getID());
       ActivityRoute route = new AbstractActivityRoute(path) {
       };
       routes.add(route);

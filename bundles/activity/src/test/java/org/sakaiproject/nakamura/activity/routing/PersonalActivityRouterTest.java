@@ -24,6 +24,8 @@ import org.junit.Test;
 import org.sakaiproject.nakamura.api.activity.ActivityRoute;
 import org.sakaiproject.nakamura.api.activity.ActivityUtils;
 
+import javax.jcr.RepositoryException;
+
 /**
  *
  */
@@ -35,7 +37,7 @@ public class PersonalActivityRouterTest extends AbstractActivityRouterTest {
   }
   
   @Test
-  public void testAdding() {
+  public void testAdding() throws RepositoryException {
     replay();
     PersonalActivityRouter router = new PersonalActivityRouter();
     router.route(activity, routes);
@@ -43,7 +45,7 @@ public class PersonalActivityRouterTest extends AbstractActivityRouterTest {
     ActivityRoute route = routes.get(0);
     String dest = route.getDestination();
 
-    Assert.assertEquals(ActivityUtils.getUserFeed(auJack), dest);
+    Assert.assertEquals(ActivityUtils.getUserFeed(auJack.getID()), dest);
     verify();
   }
 

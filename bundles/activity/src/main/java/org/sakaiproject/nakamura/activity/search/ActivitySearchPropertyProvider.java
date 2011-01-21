@@ -21,19 +21,13 @@ import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Properties;
 import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Service;
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.UserManager;
 import org.apache.jackrabbit.util.ISO9075;
 import org.apache.sling.api.SlingHttpServletRequest;
-import org.apache.sling.jcr.base.util.AccessControlUtil;
 import org.sakaiproject.nakamura.api.activity.ActivityUtils;
 import org.sakaiproject.nakamura.api.search.SearchPropertyProvider;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 
 import java.util.Map;
-
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
 
 @Component(immediate = true, enabled = true, label = "ActivitySearchPropertyProvider")
 @Properties(value = {
@@ -58,15 +52,7 @@ public class ActivitySearchPropertyProvider implements SearchPropertyProvider {
     if (user.equals(UserConstants.ANON_USERID)) {
       throw new IllegalStateException("Anonymous users can't see the feed.");
     }
-    Authorizable au;
-    try {
-      Session session = request.getResourceResolver().adaptTo(Session.class);
-      UserManager um = AccessControlUtil.getUserManager(session);
-      au = um.getAuthorizable(user);
-    } catch (RepositoryException e) {
-      throw new RuntimeException(e);
-    }
-    String path = ActivityUtils.getUserFeed(au);
+    String path = ActivityUtils.getUserFeed(user);
     // Encode the path
     path = ISO9075.encodePath(path);
     propertiesMap.put("_myFeed", path);
