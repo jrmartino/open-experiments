@@ -17,14 +17,16 @@
  */
 package org.sakaiproject.nakamura.user.servlet;
 
-import org.apache.jackrabbit.api.security.user.Authorizable;
+import edu.emory.mathcs.backport.java.util.Arrays;
+
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.resource.Resource;
 import org.apache.sling.api.resource.ResourceNotFoundException;
+import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.api.servlets.HtmlResponse;
-import org.apache.sling.jackrabbit.usermanager.impl.post.DeleteAuthorizableServlet;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
+import org.apache.sling.servlets.post.SlingPostConstants;
 import org.osgi.service.event.EventAdmin;
 import org.sakaiproject.nakamura.api.doc.BindingType;
 import org.sakaiproject.nakamura.api.doc.ServiceBinding;
@@ -34,30 +36,31 @@ import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceParameter;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
 import org.sakaiproject.nakamura.api.doc.ServiceSelector;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.AuthorizableManager;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessService;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.util.osgi.EventUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
 import java.util.Dictionary;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
+import java.util.NoSuchElementException;
 
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
 import javax.servlet.http.HttpServletResponse;
 
 /**
  * Sling Post Operation implementation for deleting one or more users and/or groups from the
- * jackrabbit UserManager.
-
+ * Sparse AuthorizableManager.
+ * TODO Update comments for Sparse.
+ *
  * <h2>Rest Service Description</h2>
  * <p>
  * Deletes an Authorizable, currently a user or a group. Maps on to nodes of resourceType <code>sling/users</code> or <code>sling/users</code> like
@@ -121,7 +124,7 @@ import javax.servlet.http.HttpServletResponse;
     @ServiceResponse(code=404,description="Group or User was not found."),
     @ServiceResponse(code=500,description="Failure with HTML explanation.")
         }))
-public class DeleteSakaiAuthorizableServlet extends DeleteAuthorizableServlet {
+public class DeleteSakaiAuthorizableServlet extends AbstractAuthorizablePostServlet {
 
   /**
    *
@@ -142,72 +145,158 @@ public class DeleteSakaiAuthorizableServlet extends DeleteAuthorizableServlet {
    */
   protected transient EventAdmin eventAdmin;
 
-  /**
-   * {@inheritDoc}
-   * @see org.apache.sling.jackrabbit.usermanager.post.CreateUserServlet#handleOperation(org.apache.sling.api.SlingHttpServletRequest, org.apache.sling.api.servlets.HtmlResponse, java.util.List)
-   */
+  @SuppressWarnings("unchecked")
   @Override
   protected void handleOperation(SlingHttpServletRequest request, HtmlResponse response,
-      List<Modification> changes) throws RepositoryException {
-
+      List<Modification> changes) {
+    Session session = StorageClientUtils.adaptToSession(request.getResourceResolver().adaptTo(javax.jcr.Session.class));
+    AuthorizableManager authorizableManager;
+    try {
+      authorizableManager = session.getAuthorizableManager();
+    } catch (StorageClientException e) {
+      LOGGER.warn(e.getMessage(),e);
+      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
+      return;
+    }
+    boolean mustExist;
     Iterator<Resource> res = getApplyToResources(request);
-    Collection<Authorizable> authorizables = new HashSet<Authorizable>();
-
     if (res == null) {
-        Resource resource = request.getResource();
-        Authorizable item = resource.adaptTo(Authorizable.class);
-        if (item == null) {
-            String msg = "Missing source " + resource.getPath()
-                + " for delete";
-            response.setStatus(HttpServletResponse.SC_NOT_FOUND, msg);
-            throw new ResourceNotFoundException(msg);
-        }
-        authorizables.add(item);
+      Resource resource = request.getResource();
+      if (resource == null) {
+        String msg = "No resource specified for deletion";
+        response.setStatus(HttpServletResponse.SC_NOT_FOUND, msg);
+        throw new ResourceNotFoundException(msg);
+      }
+      mustExist = true;
+      res = Arrays.asList(new Resource[] {resource}).iterator();
     } else {
-        while (res.hasNext()) {
-            Resource resource = res.next();
-            Authorizable item = resource.adaptTo(Authorizable.class);
-            if (item != null) {
-              authorizables.add(item);
-            }
-        }
+      mustExist = false;
     }
 
-    Session session = request.getResourceResolver().adaptTo(Session.class);
-    Map<String, Boolean> authorizableEvents = new HashMap<String, Boolean>();
-    try {
-      for ( Authorizable authorizable : authorizables) {
-        authorizableEvents.put(authorizable.getID(), authorizable.isGroup());
-        postProcessorService.process(authorizable, session, ModificationType.DELETE, request);
-      }
-      // delete the user objects
-      super.handleOperation(request, response, changes);
+    while (res.hasNext()) {
+      Resource resource = res.next();
+      Authorizable authorizable = resource.adaptTo(Authorizable.class);
+      if (authorizable == null) {
+        String msg = "Missing source " + resource.getPath() + " for delete";
+        if (mustExist) {
+          response.setStatus(HttpServletResponse.SC_NOT_FOUND, msg);
+          throw new ResourceNotFoundException(msg);
+        } else {
+          // Move on to the next one.
+          LOGGER.info(msg);
+        }
+      } else {
+        try {
+          // In the special case of deletion, the "post-processors" are treated as pre-processors.
+          postProcessorService.process(authorizable, session, ModificationType.DELETE, request);
 
-      // Launch an OSGi event for each authorizable.
-      for (Entry<String, Boolean> entry : authorizableEvents.entrySet()) {
+          // Remove Authorizable.
+          authorizableManager.delete(authorizable.getId());
+          changes.add(Modification.onDeleted(resource.getPath()));
+        } catch (Exception e) {
+          LOGGER.warn(e.getMessage(),e);
+          response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
+          return;
+        }
+
+        // Launch an OSGi event for each authorizable.
         try {
           Dictionary<String, String> properties = new Hashtable<String, String>();
-          properties.put(UserConstants.EVENT_PROP_USERID, entry.getKey());
-          String topic = UserConstants.TOPIC_USER_DELETED;
-          if (entry.getValue()) {
-            topic = UserConstants.TOPIC_GROUP_DELETED;
+          properties.put(UserConstants.EVENT_PROP_USERID, authorizable.getId());
+          String topic;
+          if (authorizable instanceof Group) {
+            topic  = UserConstants.TOPIC_GROUP_DELETED;
+          } else {
+            topic = UserConstants.TOPIC_USER_DELETED;
           }
           EventUtils.sendOsgiEvent(properties, topic, eventAdmin);
         } catch (Exception e) {
           // Trap all exception so we don't disrupt the normal behaviour.
-          LOGGER.error("Failed to launch an OSGi event for creating a user.", e);
+          LOGGER.error("Failed to launch an OSGi event for deleting an Authorizable.", e);
         }
       }
-
-    } catch (Exception e) {
-      // undo any changes
-      LOGGER.warn(e.getMessage(),e);
-      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
-      session.refresh(true);
-      return;
     }
   }
 
+  /**
+   * Returns an iterator on <code>Resource</code> instances addressed in the
+   * {@link SlingPostConstants#RP_APPLY_TO} request parameter. If the request
+   * parameter is not set, <code>null</code> is returned. If the parameter is
+   * set with valid resources an empty iterator is returned. Any resources
+   * addressed in the {@link SlingPostConstants#RP_APPLY_TO} parameter is
+   * ignored.
+   *
+   * @param request The <code>SlingHttpServletRequest</code> object used to
+   *            get the {@link SlingPostConstants#RP_APPLY_TO} parameter.
+   * @return The iterator of resources listed in the parameter or
+   *         <code>null</code> if the parameter is not set in the request.
+   */
+  protected Iterator<Resource> getApplyToResources(
+          SlingHttpServletRequest request) {
+
+      String[] applyTo = request.getParameterValues(SlingPostConstants.RP_APPLY_TO);
+      if (applyTo == null) {
+          return null;
+      }
+
+      return new ApplyToIterator(request, applyTo);
+  }
+
+  private static class ApplyToIterator implements Iterator<Resource> {
+
+      private final ResourceResolver resolver;
+
+      private final Resource baseResource;
+
+      private final String[] paths;
+
+      private int pathIndex;
+
+      private Resource nextResource;
+
+      ApplyToIterator(SlingHttpServletRequest request, String[] paths) {
+          this.resolver = request.getResourceResolver();
+          this.baseResource = request.getResource();
+          this.paths = paths;
+          this.pathIndex = 0;
+
+          nextResource = seek();
+      }
+
+      public boolean hasNext() {
+          return nextResource != null;
+      }
+
+      public Resource next() {
+          if (!hasNext()) {
+              throw new NoSuchElementException();
+          }
+
+          Resource result = nextResource;
+          nextResource = seek();
+
+          return result;
+      }
+
+      public void remove() {
+          throw new UnsupportedOperationException();
+      }
+
+      private Resource seek() {
+          while (pathIndex < paths.length) {
+              String path = paths[pathIndex];
+              pathIndex++;
+
+              Resource res = resolver.getResource(baseResource, path);
+              if (res != null) {
+                  return res;
+              }
+          }
+
+          // no more elements in the array
+          return null;
+      }
+  }
 
 
 }

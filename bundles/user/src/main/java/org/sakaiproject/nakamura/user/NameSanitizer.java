@@ -17,7 +17,7 @@
  */
 package org.sakaiproject.nakamura.user;
 
-import javax.jcr.RepositoryException;
+import javax.servlet.ServletException;
 
 public class NameSanitizer {
 
@@ -29,17 +29,17 @@ public class NameSanitizer {
     this.isUser = isUser;
   }
 
-  public void validate() throws RepositoryException {
+  public void validate() throws ServletException {
     String name = this.name;
 
     // At least 3 chars.
     if (isUser() && name.length() < 3) {
-      throw new RepositoryException("Name must be bigger than 3 chars.");
+      throw new ServletException("Name must be bigger than 3 chars.");
     }
 
     // KERN-763 - UserIDs starting with g-contacts- are reserved for the contact groups.
     if (name.startsWith("g-contacts-")) {
-      throw new RepositoryException("'g-contacts-' is a reserved prefix.");
+      throw new ServletException("'g-contacts-' is a reserved prefix.");
     }
   }
 

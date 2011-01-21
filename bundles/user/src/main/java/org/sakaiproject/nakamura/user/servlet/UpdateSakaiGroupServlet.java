@@ -22,14 +22,10 @@ import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_GROUP_VIEWER
 import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_MANAGED_GROUP;
 import static org.sakaiproject.nakamura.api.user.UserConstants.PROP_MANAGERS_GROUP;
 
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.Group;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.resource.Resource;
 import org.apache.sling.api.resource.ResourceNotFoundException;
 import org.apache.sling.api.servlets.HtmlResponse;
-import org.apache.sling.jackrabbit.usermanager.impl.resource.AuthorizableResourceProvider;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.servlets.post.Modification;
 import org.apache.sling.servlets.post.ModificationType;
 import org.apache.sling.servlets.post.impl.helper.RequestProperty;
@@ -42,6 +38,11 @@ import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceParameter;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
 import org.sakaiproject.nakamura.api.doc.ServiceSelector;
+import org.sakaiproject.nakamura.api.lite.Repository;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
 import org.sakaiproject.nakamura.api.user.AuthorizablePostProcessService;
 import org.sakaiproject.nakamura.api.user.UserConstants;
 import org.sakaiproject.nakamura.util.osgi.EventUtils;
@@ -53,8 +54,7 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 
 /**
@@ -91,11 +91,11 @@ import javax.servlet.http.HttpServletResponse;
  * <dd>Failure</dd>
  * </dl>
  * <h4>Example</h4>
- *
+ * 
  * <code>
  * curl -Fprop1=value2 -Fproperty1=value1 http://localhost:8080/system/userManager/group/testGroup.update.html
  * </code>
- *
+ * 
  * @scr.component metatype="no" immediate="true"
  * @scr.service interface="javax.servlet.Servlet"
  * @scr.property name="sling.servlet.resourceTypes" values="sling/group"
@@ -106,7 +106,7 @@ import javax.servlet.http.HttpServletResponse;
  *               values.1="yyyy-MM-dd'T'HH:mm:ss.SSSZ" values.2="yyyy-MM-dd'T'HH:mm:ss"
  *               values.3="yyyy-MM-dd" values.4="dd.MM.yyyy HH:mm:ss"
  *               values.5="dd.MM.yyyy"
- *
+ * 
  */
 @ServiceDocumentation(name = "Update Group Servlet", description = "Updates a group's properties. Maps on to nodes of resourceType sling/group "
     + "like /rep:system/rep:userManager/rep:groups/ae/3f/ed/groupname mapped to a resource "
@@ -124,9 +124,8 @@ import javax.servlet.http.HttpServletResponse;
     @ServiceParameter(name = ":viewer", description = "Add a viewer to this group, note: this does not add the viewer as a member! (optional)"),
     @ServiceParameter(name = ":viewer@Delete", description = "Remove a viewer from this group, note: this does not remove the viewer as a member! (optional)"),
     @ServiceParameter(name = "propertyName@Delete", description = "Delete property, eg property1@Delete means delete property1 (optional)"),
-    @ServiceParameter(name="",description="Additional parameters become group node properties, " +
-        "except for parameters starting with ':', which are only forwarded to post-processors (optional)")
-    }, response={
+    @ServiceParameter(name = "", description = "Additional parameters become group node properties, "
+        + "except for parameters starting with ':', which are only forwarded to post-processors (optional)") }, response = {
     @ServiceResponse(code = 200, description = "Success, a redirect is sent to the group's resource locator with HTML describing status."),
     @ServiceResponse(code = 404, description = "Group was not found."),
     @ServiceResponse(code = 500, description = "Failure with HTML explanation.") }))
@@ -142,39 +141,39 @@ public class UpdateSakaiGroupServlet extends AbstractSakaiGroupPostServlet {
 
   /**
    * The post processor service.
-   *
+   * 
    * @scr.reference
    */
   protected transient AuthorizablePostProcessService postProcessorService;
 
   /**
    * The JCR Repository we access to resolve resources
-   *
+   * 
    * @scr.reference
    */
-  private transient SlingRepository repository;
+  private transient Repository repository;
 
   /**
    * Used to launch OSGi events.
-   *
+   * 
    * @scr.reference
    */
   protected transient EventAdmin eventAdmin;
 
   /** Returns the JCR repository used by this service. */
-  protected SlingRepository getRepository() {
+  protected Repository getRepository() {
     return repository;
   }
 
   /**
    * {@inheritDoc}
-   *
+   * 
    * @see org.apache.sling.jackrabbit.usermanager.post.CreateUserServlet#handleOperation(org.apache.sling.api.SlingHttpServletRequest,
    *      org.apache.sling.api.servlets.HtmlResponse, java.util.List)
    */
   @Override
   protected void handleOperation(SlingHttpServletRequest request,
-      HtmlResponse htmlResponse, List<Modification> changes) throws RepositoryException {
+      HtmlResponse htmlResponse, List<Modification> changes) throws ServletException {
 
     Authorizable authorizable = null;
     Resource resource = request.getResource();
@@ -187,15 +186,17 @@ public class UpdateSakaiGroupServlet extends AbstractSakaiGroupPostServlet {
     if (authorizable == null) {
       throw new ResourceNotFoundException("Group to update could not be determined");
     }
-    Session session = request.getResourceResolver().adaptTo(Session.class);
+    final Session session = StorageClientUtils.adaptToSession(request
+        .getResourceResolver().adaptTo(javax.jcr.Session.class));
     if (session == null) {
-      throw new RepositoryException("JCR Session not found");
+      throw new ServletException("JCR Session not found");
     }
     try {
-      String groupPath = AuthorizableResourceProvider.SYSTEM_USER_MANAGER_GROUP_PREFIX
-      + authorizable.getID();
+      String groupPath = UserConstants.SYSTEM_USER_MANAGER_GROUP_PREFIX
+          + authorizable.getId();
 
-      Map<String, RequestProperty> reqProperties = collectContent(request, htmlResponse, groupPath);
+      Map<String, RequestProperty> reqProperties = collectContent(request, htmlResponse,
+          groupPath);
       try {
         // cleanup any old content (@Delete parameters)
         // This is the only way to make a private group (one with a "rep:group-viewers"
@@ -216,34 +217,35 @@ public class UpdateSakaiGroupServlet extends AbstractSakaiGroupPostServlet {
         writeContent(session, authorizable, reqProperties, changes);
 
         // update the group memberships
-        if (authorizable.isGroup()) {
+        if (authorizable instanceof Group) {
           updateGroupMembership(request, authorizable, changes);
-          updateOwnership(request, (Group)authorizable, new String[0], changes);
+          updateOwnership(request, (Group) authorizable, new String[0], changes);
         }
-      } catch (RepositoryException re) {
-        throw new RepositoryException("Failed to update group.", re);
+      } catch (ServletException re) {
+        throw new ServletException("Failed to update group.", re);
       }
 
       try {
-        postProcessorService.process(authorizable, session, ModificationType.MODIFY, request);
+        postProcessorService.process(authorizable, session, ModificationType.MODIFY,
+            request);
       } catch (Exception e) {
         LOGGER.warn(e.getMessage(), e);
 
-        htmlResponse.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e
-            .getMessage());
+        htmlResponse.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+            e.getMessage());
         return;
       }
 
-      if (session.hasPendingChanges()) {
-        session.save();
+      if (authorizable.isModified()) {
+        session.getAuthorizableManager().updateAuthorizable(authorizable);
       }
 
       // Launch an OSGi event for updating a group.
       try {
         Dictionary<String, String> properties = new Hashtable<String, String>();
-        properties.put(UserConstants.EVENT_PROP_USERID, authorizable.getID());
-        EventUtils
-            .sendOsgiEvent(properties, UserConstants.TOPIC_GROUP_CREATED, eventAdmin);
+        properties.put(UserConstants.EVENT_PROP_USERID, authorizable.getId());
+        EventUtils.sendOsgiEvent(properties, UserConstants.TOPIC_GROUP_CREATED,
+            eventAdmin);
       } catch (Exception e) {
         // Trap all exception so we don't disrupt the normal behaviour.
         LOGGER.error("Failed to launch an OSGi event for creating a user.", e);
@@ -251,22 +253,22 @@ public class UpdateSakaiGroupServlet extends AbstractSakaiGroupPostServlet {
 
     } catch (Throwable t) {
       LOGGER.debug("Failed " + t.getMessage(), t);
-      throw new RepositoryException(t.getMessage(), t);
+      throw new ServletException(t.getMessage(), t);
     }
   }
 
   /**
    * @param slingRepository
    */
-  protected void bindRepository(SlingRepository slingRepository) {
-    this.repository = slingRepository;
+  protected void bindRepository(Repository repository) {
+    this.repository = repository;
 
   }
 
   /**
    * @param slingRepository
    */
-  protected void unbindRepository(SlingRepository slingRepository) {
+  protected void unbindRepository(Repository repository) {
     this.repository = null;
 
   }
