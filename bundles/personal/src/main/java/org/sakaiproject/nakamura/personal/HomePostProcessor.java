@@ -20,6 +20,7 @@ package org.sakaiproject.nakamura.personal;
 import static javax.jcr.security.Privilege.JCR_ALL;
 import static javax.jcr.security.Privilege.JCR_READ;
 import static javax.jcr.security.Privilege.JCR_WRITE;
+
 import static org.apache.sling.jcr.resource.JcrResourceConstants.SLING_RESOURCE_TYPE_PROPERTY;
 import static org.sakaiproject.nakamura.api.personal.PersonalConstants.VISIBILITY_LOGGED_IN;
 import static org.sakaiproject.nakamura.api.personal.PersonalConstants.VISIBILITY_PRIVATE;

@@ -28,8 +28,13 @@ import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.ReferencePolicy;
 import org.apache.felix.scr.annotations.Service;
+
 import org.apache.jackrabbit.JcrConstants;
-import org.apache.jackrabbit.api.security.user.Authorizable;
+//import org.apache.jackrabbit.api.security.user.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.content.Content;
+import org.sakaiproject.nakamura.api.lite.Session;
+
 import org.apache.sling.commons.osgi.OsgiUtil;
 import org.apache.sling.jcr.base.util.AccessControlUtil;
 import org.apache.sling.jcr.contentloader.ContentImporter;
@@ -51,12 +56,12 @@ import java.util.Set;
 import javax.jcr.Node;
 import javax.jcr.PathNotFoundException;
 import javax.jcr.RepositoryException;
-import javax.jcr.Session;
+//import javax.jcr.Session;
 import javax.jcr.Value;
 import javax.jcr.ValueFormatException;
 import javax.jcr.lock.LockException;
 import javax.jcr.nodetype.ConstraintViolationException;
-import javax.jcr.security.AccessControlManager;
+//import javax.jcr.security.AccessControlManager;
 import javax.jcr.security.Privilege;
 import javax.jcr.version.VersionException;
 
@@ -91,10 +96,12 @@ public class ProfilePostProcessor implements AuthorizablePostProcessor {
       Map<String, Object[]> parameters) throws Exception {
     try {
       if (ModificationType.CREATE.equals(change.getType())) {
-        Node profileNode = createProfile(session, authorizable);
+        //Node profileNode = createProfile(session, authorizable);
+        Content profileContent = createProfile(session, authorizable);
 
         // Update the values on the profile node.
-        updateProfileProperties(session, profileNode, authorizable, change, parameters);
+        //updateProfileProperties(session, profileNode, authorizable, change, parameters);
+        updateProfileProperties(session, profileContent, authorizable, change, parameters);
       } else {
         if (!parameters.containsKey(":sakai:update-profile")
             || !"false".equals(parameters.get(":sakai:update-profile")[0])) {
@@ -160,7 +167,7 @@ public class ProfilePostProcessor implements AuthorizablePostProcessor {
    * @return
    * @throws RepositoryException
    */
-  private Node createProfile(Session session, Authorizable authorizable)
+  private Content createProfile(Session session, Authorizable authorizable)
       throws RepositoryException {
     String path = PersonalUtils.getProfilePath(authorizable);
     Node profileNode = null;
@@ -179,6 +186,15 @@ public class ProfilePostProcessor implements AuthorizablePostProcessor {
       profileNode = session.getNode(path);
     }
     return profileNode;
+  }
+  
+  private void updateProfileProperties(Session session, Content profileContent,
+      Authorizable authorizable, Modification change, Map<String, Object[]> parameters) {
+    if (profileContent == null) {
+      return;
+    }
+    
+    
   }
 
   /**
