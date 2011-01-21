@@ -28,8 +28,16 @@ import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.ReferencePolicy;
 import org.apache.felix.scr.annotations.Service;
+
 import org.apache.jackrabbit.JcrConstants;
-import org.apache.jackrabbit.api.security.user.Authorizable;
+//import org.apache.jackrabbit.api.security.user.Authorizable;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
+import org.sakaiproject.nakamura.api.lite.content.Content;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+
 import org.apache.sling.commons.osgi.OsgiUtil;
 import org.apache.sling.jcr.base.util.AccessControlUtil;
 import org.apache.sling.jcr.contentloader.ContentImporter;
@@ -48,17 +56,17 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
-import javax.jcr.Node;
-import javax.jcr.PathNotFoundException;
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
-import javax.jcr.Value;
-import javax.jcr.ValueFormatException;
-import javax.jcr.lock.LockException;
-import javax.jcr.nodetype.ConstraintViolationException;
-import javax.jcr.security.AccessControlManager;
-import javax.jcr.security.Privilege;
-import javax.jcr.version.VersionException;
+//import javax.jcr.Node;
+//import javax.jcr.PathNotFoundException;
+//import javax.jcr.RepositoryException;
+//import javax.jcr.Session;
+//import javax.jcr.Value;
+//import javax.jcr.ValueFormatException;
+//import javax.jcr.lock.LockException;
+//import javax.jcr.nodetype.ConstraintViolationException;
+//import javax.jcr.security.AccessControlManager;
+//import javax.jcr.security.Privilege;
+//import javax.jcr.version.VersionException;
 
 @Component(immediate = true, metatype = true)
 @Service(value = AuthorizablePostProcessor.class)
@@ -91,10 +99,12 @@ public class ProfilePostProcessor implements AuthorizablePostProcessor {
       Map<String, Object[]> parameters) throws Exception {
     try {
       if (ModificationType.CREATE.equals(change.getType())) {
-        Node profileNode = createProfile(session, authorizable);
+        //Node profileNode = createProfile(session, authorizable);
+        Content profileContent = createProfile(session, authorizable);
 
         // Update the values on the profile node.
-        updateProfileProperties(session, profileNode, authorizable, change, parameters);
+        //updateProfileProperties(session, profileNode, authorizable, change, parameters);
+        updateProfileProperties(session, profileContent, authorizable, change, parameters);
       } else {
         if (!parameters.containsKey(":sakai:update-profile")
             || !"false".equals(parameters.get(":sakai:update-profile")[0])) {
@@ -102,7 +112,7 @@ public class ProfilePostProcessor implements AuthorizablePostProcessor {
               authorizable, change, parameters);
         }
       }
-      LOGGER.debug("DoneProcessing  {} ", authorizable.getID());
+      LOGGER.debug("DoneProcessing  {} ", authorizable.getId());
     } catch (Exception ex) {
       LOGGER.error("Post Processing failed " + ex.getMessage(), ex);
     }
@@ -120,13 +130,13 @@ public class ProfilePostProcessor implements AuthorizablePostProcessor {
    * @throws RepositoryException
    */
   private boolean isPostProcessingDone(Session session, Authorizable authorizable)
-      throws RepositoryException {
+      throws StorageClientException, AccessDeniedException {
     boolean isProfileCreated = false;
-    Node node = getProfileNode(session, authorizable);
-    if (node != null) {
-      String type = nodeTypeForAuthorizable(authorizable.isGroup());
-      if (node.hasProperty(SLING_RESOURCE_TYPE_PROPERTY)) {
-        if (node.getProperty(SLING_RESOURCE_TYPE_PROPERTY).getString().equals(type)) {
+    Content content = getProfileNode(session, authorizable);
+    if (content != null) {
+      String type = nodeTypeForAuthorizable(authorizable instanceof Group);
+      if (content.hasProperty(SLING_RESOURCE_TYPE_PROPERTY)) {
+        if (((String) content.getProperty(SLING_RESOURCE_TYPE_PROPERTY)).equals(type)) {
           isProfileCreated = true;
         }
       }
@@ -142,16 +152,29 @@ public class ProfilePostProcessor implements AuthorizablePostProcessor {
     }
   }
 
-  private Node getProfileNode(Session session, Authorizable authorizable)
-      throws RepositoryException {
-    Node profileNode;
+  /**
+   * Gets the profile node.
+   * 
+   * @param session
+   *          the session
+   * @param authorizable
+   *          the authorizable
+   * @return the profile node
+   * @throws StorageClientException
+   *           the storage client exception
+   * @throws AccessDeniedException
+   *           the access denied exception
+   */
+  private Content getProfileNode(Session session, Authorizable authorizable)
+      throws StorageClientException, AccessDeniedException {
+    Content profileContent;
     String path = PersonalUtils.getProfilePath(authorizable);
-    if (session.nodeExists(path)) {
-      profileNode = session.getNode(path);
+    if (session.getContentManager().get(path) != null) {
+      profileContent = session.getContentManager().get(path);
     } else {
-      profileNode = null;
+      profileContent = null;
     }
-    return profileNode;
+    return profileContent;
   }
 
   /**
@@ -160,7 +183,7 @@ public class ProfilePostProcessor implements AuthorizablePostProcessor {
    * @return
    * @throws RepositoryException
    */
-  private Node createProfile(Session session, Authorizable authorizable)
+  private Content createProfile(Session session, Authorizable authorizable)
       throws RepositoryException {
     String path = PersonalUtils.getProfilePath(authorizable);
     Node profileNode = null;
@@ -180,7 +203,7 @@ public class ProfilePostProcessor implements AuthorizablePostProcessor {
     }
     return profileNode;
   }
-
+  
   /**
    * @param authorizable
    * @param changes
@@ -190,27 +213,27 @@ public class ProfilePostProcessor implements AuthorizablePostProcessor {
    * @throws VersionException
    * @throws PathNotFoundException
    */
-  private void updateProfileProperties(Session session, Node profileNode,
+  private void updateProfileProperties(Session session, Content profileContent,
       Authorizable authorizable, Modification change, Map<String, Object[]> parameters)
       throws RepositoryException {
-    if (profileNode == null) {
+    if (profileContent == null) {
       return;
     }
 
     // The current session does not necessarily have write access to
     // the Profile.
-    if (isAbleToModify(session, profileNode.getPath())) {
+    if (isAbleToModify(session, profileContent.getPath())) {
       // If the client sent a parameter specifying new Profile content,
       // apply it now.
       String defaultProfile = processProfileParameters(defaultProfileTemplate,
           authorizable, parameters);
-      ProfileImporter.importFromParameters(profileNode, parameters, contentImporter,
+      ProfileImporter.importFromParameters(profileContent, parameters, contentImporter,
           session, defaultProfile);
 
       // build a blacklist set of properties that should be kept private
       Set<String> privateProperties = new HashSet<String>();
-      if (profileNode.hasProperty(UserConstants.PRIVATE_PROPERTIES)) {
-        Value[] pp = profileNode.getProperty(UserConstants.PRIVATE_PROPERTIES)
+      if (profileContent.hasProperty(UserConstants.PRIVATE_PROPERTIES)) {
+        Value[] pp = profileContent.getProperty(UserConstants.PRIVATE_PROPERTIES)
             .getValues();
         for (Value v : pp) {
           privateProperties.add(v.getString());
@@ -219,8 +242,8 @@ public class ProfilePostProcessor implements AuthorizablePostProcessor {
       // copy the non blacklist set of properties into the users profile.
       if (authorizable != null) {
         // explicitly add protected properties form the user authorizable
-        if (!authorizable.isGroup() && !profileNode.hasProperty("rep:userId")) {
-          profileNode.setProperty("rep:userId", authorizable.getID());
+        if (!authorizable.isGroup() && !profileContent.hasProperty("rep:userId")) {
+          profileContent.setProperty("rep:userId", authorizable.getID());
         }
         Iterator<?> inames = authorizable.getPropertyNames();
         while (inames.hasNext()) {
@@ -230,16 +253,16 @@ public class ProfilePostProcessor implements AuthorizablePostProcessor {
           if (!propertyName.startsWith("jcr:") && !propertyName.startsWith("rep:")) {
             if (!privateProperties.contains(propertyName)) {
               Value[] v = authorizable.getProperty(propertyName);
-              if (!(profileNode.hasProperty(propertyName) && profileNode
+              if (!(profileContent.hasProperty(propertyName) && profileContent
                   .getProperty(propertyName).getDefinition().isProtected())) {
                 if (v.length == 1) {
                   try {
-                    profileNode.setProperty(propertyName, v[0]);
+                    profileContent.setProperty(propertyName, v[0]);
                   } catch (ValueFormatException vfe) {
-                    profileNode.setProperty(propertyName, v);
+                    profileContent.setProperty(propertyName, v);
                   }
                 } else {
-                  profileNode.setProperty(propertyName, v);
+                  profileContent.setProperty(propertyName, v);
                 }
               }
             }

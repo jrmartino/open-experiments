@@ -17,20 +17,21 @@
  */
 package org.sakaiproject.nakamura.util;
 
-
-import org.apache.jackrabbit.api.security.principal.ItemBasedPrincipal;
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.UserManager;
-import org.apache.sling.jcr.base.util.AccessControlUtil;
+//import org.apache.jackrabbit.api.security.principal.ItemBasedPrincipal;
+//import org.apache.jackrabbit.api.security.user.Authorizable;
+//import org.apache.jackrabbit.api.security.user.UserManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.security.Principal;
-
 import javax.jcr.Node;
 import javax.jcr.RepositoryException;
-import javax.jcr.Session;
 import javax.jcr.Value;
+
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.authorizable.Authorizable;
+import org.sakaiproject.nakamura.api.lite.authorizable.Group;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
 
 /**
  *
@@ -41,23 +42,32 @@ public class PersonalUtils {
    * Property name for the e-mail property of a user's profile
    */
   public static final String PROP_EMAIL_ADDRESS = "email";
+  
   /**
    * The base location of the user space.
    */
   public static final String PATH_USER = "/_user";
+
+  /**
+   * The base location for the Home space. 
+   */
+  public static final String PATH_HOME = "a:";
+  
   /**
    * The base location of the group space.
    */
   public static final String PATH_GROUP = "/_group";
-  
+
   /**
    * The node name of the authentication profile in public space.
    */
   public static final String PATH_AUTH_PROFILE = "authprofile";
+  
   /**
    * The name of the private folder
    */
   public static final String PATH_PRIVATE = "private";
+  
   /**
    * The name of the public folder
    */
@@ -68,25 +78,27 @@ public class PersonalUtils {
    */
   public static final String PROP_PREFERRED_MESSAGE_TRANSPORT = "preferredMessageTransport";
 
-
   private static final Logger LOGGER = LoggerFactory.getLogger(PersonalUtils.class);
 
   /**
    * @param au
    *          The authorizable to get the hashed path for.
-   * @return The hashed path (ex: a/ad/adm/admi/admin/)
+   * @return The hashed path (ex: admin)
    * @throws RepositoryException
    */
-  public static String getUserHashedPath(Authorizable au) throws RepositoryException {
+  public static String getUserHashedPath(Authorizable au) {
     String hash = null;
     if (au.hasProperty("path")) {
-      hash = au.getProperty("path")[0].getString();
+      hash = (String) au.getProperty("path");
+      //hash = au.getProperty("path")[0].getString();
     } else {
       LOGGER
           .debug(
-              "Authorizable {} has no path property set on it, grabbing hash from ItemBasedPrincipal!",
+              "Authorizable {} has no path property set on it, grabbing path from the Authorizable ID!",
               au);
-      Principal p = au.getPrincipal();
+      //Principal p = au.getPrincipal();
+      hash = au.getId();
+      /*
       if (p instanceof ItemBasedPrincipal) {
         ItemBasedPrincipal principal = (ItemBasedPrincipal) p;
         hash = principal.getPath();
@@ -99,6 +111,8 @@ public class PersonalUtils {
         hash = n.substring(0, 1) + "/" + n.substring(0, 2) + "/" + n.substring(0, 3)
             + "/" + n + "/";
       }
+      */
+      
     }
     return hash;
   }
@@ -131,8 +145,7 @@ public class PersonalUtils {
       throws RepositoryException {
     String transport = null;
     if (profileNode.hasProperty(PROP_PREFERRED_MESSAGE_TRANSPORT)) {
-      transport = profileNode.getProperty(PROP_PREFERRED_MESSAGE_TRANSPORT)
-          .getString();
+      transport = profileNode.getProperty(PROP_PREFERRED_MESSAGE_TRANSPORT).getString();
     }
     return transport;
   }
@@ -165,42 +178,43 @@ public class PersonalUtils {
     return getHomePath(au) + "/" + PATH_PUBLIC;
   }
 
-
-
   /**
    * Get the home folder for an authorizable. If the authorizable is a user, this might
-   * return: /_user/t/te/tes/test/testuser
+   * return: a:userId
    * 
    * @param au
    *          The authorizable to get the home folder for.
-   * @return The absolute path in JCR to the home folder for an authorizable.
+   * @return The absolute path in Sparse to the home folder for an authorizable.
    */
   public static String getHomePath(Authorizable au) {
     String folder = PathUtils.getSubPath(au);
-    if (au != null && au.isGroup()) {
+    if (au != null && au instanceof Group) {
       folder = PATH_GROUP + folder;
     } else {
       // Assume this is a user.
-      folder = PATH_USER + folder;
+      folder = PATH_HOME + folder;
     }
     return PathUtils.normalizePath(folder);
   }
 
-
   /**
    * @param session
-   *          The Jackrabbit session.
+   *          The Sparse session.
    * @param id
    *          The id of an authorizable.
    * @return An authorizable that represents a person.
-   * @throws RepositoryException
+   * @throws StorageClientException
    */
   public static Authorizable getAuthorizable(Session session, String id)
-      throws RepositoryException {
-    UserManager um = AccessControlUtil.getUserManager(session);
-    return um.getAuthorizable(id);
+      throws StorageClientException {
+    Authorizable authorizable = null;
+    try {
+      authorizable = session.getAuthorizableManager().findAuthorizable(id);
+    } catch (AccessDeniedException e) {
+      LOGGER.error("Access denied to the Authorizable object for ID: [" + id + "].");
+      throw new StorageClientException(e.getMessage());
+    }
+    return authorizable;
   }
-
-
 
 }
