@@ -180,11 +180,11 @@ public class PersonalUtils {
 
   /**
    * Get the home folder for an authorizable. If the authorizable is a user, this might
-   * return: /_user/t/te/tes/test/testuser
+   * return: a:userId
    * 
    * @param au
    *          The authorizable to get the home folder for.
-   * @return The absolute path in JCR to the home folder for an authorizable.
+   * @return The absolute path in Sparse to the home folder for an authorizable.
    */
   public static String getHomePath(Authorizable au) {
     String folder = PathUtils.getSubPath(au);
@@ -192,7 +192,7 @@ public class PersonalUtils {
       folder = PATH_GROUP + folder;
     } else {
       // Assume this is a user.
-      folder = PATH_USER + folder;
+      folder = PATH_HOME + folder;
     }
     return PathUtils.normalizePath(folder);
   }
