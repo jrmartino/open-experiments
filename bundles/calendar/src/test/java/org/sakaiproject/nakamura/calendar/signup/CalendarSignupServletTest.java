@@ -26,23 +26,31 @@ import static org.mockito.Mockito.when;
 import static org.sakaiproject.nakamura.api.calendar.CalendarConstants.PARTICIPANTS_NODE_NAME;
 import static org.sakaiproject.nakamura.api.calendar.CalendarConstants.SAKAI_EVENT_SIGNUP_PARTICIPANT_RT;
 
-import org.apache.jackrabbit.api.JackrabbitSession;
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.UserManager;
+import com.google.common.collect.ImmutableMap;
+
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.SlingHttpServletResponse;
-import org.apache.sling.commons.testing.jcr.MockNode;
-import org.apache.sling.commons.testing.jcr.MockValue;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.sakaiproject.nakamura.api.calendar.CalendarException;
+import org.sakaiproject.nakamura.api.lite.ClientPoolException;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AclModification;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AclModification.Operation;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.Permissions;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.Security;
+import org.sakaiproject.nakamura.api.lite.content.Content;
+import org.sakaiproject.nakamura.api.lite.content.ContentManager;
 import org.sakaiproject.nakamura.api.user.UserConstants;
+import org.sakaiproject.nakamura.lite.BaseMemoryRepository;
+import org.sakaiproject.nakamura.lite.RepositoryImpl;
 
 import java.io.IOException;
 
-import javax.jcr.Value;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 
@@ -52,32 +60,38 @@ import javax.servlet.http.HttpServletResponse;
 public class CalendarSignupServletTest {
 
   private CalendarSignupServlet servlet;
-  private MockNode signupNode;
   private String signupPath;
-  private JackrabbitSession session;
   private String userName;
-  private MockValue pathValue;
-  private SlingRepository slingRepository;
+  private BaseMemoryRepository baseMemoryRepository;
+  private RepositoryImpl sparseRepository;
+  private Session session;
+
+  public CalendarSignupServletTest() throws ClientPoolException, StorageClientException, AccessDeniedException, ClassNotFoundException {
+    baseMemoryRepository = new BaseMemoryRepository();
+    sparseRepository = baseMemoryRepository.getRepository();
+    session = sparseRepository.loginAdministrative();
+    session.getAuthorizableManager().createUser("ieb", "Ian Boston", "test",
+        ImmutableMap.of("x", StorageClientUtils.toStore("y")));
+    session.getContentManager().update(
+        new Content("a:ieb", null));
+    session.getAccessControlManager().setAcl(
+        Security.ZONE_CONTENT,
+        "a:ieb",
+        new AclModification[] { new AclModification(AclModification.grantKey("ieb"),
+            Permissions.CAN_MANAGE.getPermission(), Operation.OP_REPLACE) });
+    signupPath = "a:ieb/path/to/calendar/path/to/event/signup";
+    session.getContentManager().update(new Content(signupPath,null));
+  
+    session.logout();
+    session = sparseRepository.loginAdministrative("ieb");
+
+  }
 
   @Before
   public void setUp() throws Exception {
-    signupPath = "/path/to/calendar/path/to/event/signup";
-    signupNode = new MockNode(signupPath);
-    slingRepository = mock(SlingRepository.class);
     servlet = new CalendarSignupServlet();
-    servlet.slingRepository = slingRepository;
+    servlet.sparseRepository = sparseRepository;
 
-    UserManager um = mock(UserManager.class);
-    userName = "jack";
-    Authorizable au = mock(Authorizable.class);
-    when(au.hasProperty("path")).thenReturn(true);
-    pathValue = new MockValue("/j/ja/jack");
-    when(au.getProperty("path")).thenReturn(new Value[] { pathValue });
-    when(um.getAuthorizable(userName)).thenReturn(au);
-    session = mock(JackrabbitSession.class);
-    when(session.getUserID()).thenReturn(userName);
-    when(session.getUserManager()).thenReturn(um);
-    signupNode.setSession(session);
 
   }
 
@@ -95,12 +109,17 @@ public class CalendarSignupServletTest {
   @Test
   public void testSignedupAlready() throws Exception {
 
-    when(
-        session.itemExists(signupPath + "/" + PARTICIPANTS_NODE_NAME
-            + pathValue.getString())).thenReturn(true);
+    
+    Session session = sparseRepository.loginAdministrative("ieb");
+    ContentManager contentManager = session.getContentManager();
+    
+    String path = signupPath + "/" + PARTICIPANTS_NODE_NAME+ "/ieb";
+    
+    contentManager.update(new Content(path, null));
+    Content signupNode = contentManager.get(signupPath);
 
     try {
-      servlet.checkAlreadySignedup(signupNode);
+      servlet.checkAlreadySignedup(signupNode, session);
       fail("This should have thrown an exception.");
     } catch (CalendarException e) {
       assertEquals(400, e.getCode());
@@ -111,24 +130,22 @@ public class CalendarSignupServletTest {
   public void testHandleSignup() throws Exception {
 
     // Participant node.
-    MockNode participantsNode = new MockNode(signupPath + "/" + PARTICIPANTS_NODE_NAME
-        + pathValue.getString());
+    String path = signupPath + "/" + PARTICIPANTS_NODE_NAME+ "/ieb";
+    
+    Session session = sparseRepository.loginAdministrative("ieb");
+    ContentManager contentManager = session.getContentManager();
+    
+    contentManager.delete(path);
+    Content signupNode = contentManager.get(signupPath);
 
-    // Admin session
-    JackrabbitSession adminSession = mock(JackrabbitSession.class);
-    when(adminSession.itemExists(participantsNode.getPath())).thenReturn(true);
-    when(adminSession.getItem(participantsNode.getPath())).thenReturn(participantsNode);
-    when(adminSession.hasPendingChanges()).thenReturn(true);
 
-    when(slingRepository.loginAdministrative(null)).thenReturn(adminSession);
+    servlet.handleSignup(signupNode,session);
+    
+    Content participantsNode = contentManager.get(path);
 
-    servlet.handleSignup(signupNode);
-
-    verify(adminSession).save();
-    verify(adminSession).logout();
-    assertEquals(participantsNode.getProperty(SLING_RESOURCE_TYPE_PROPERTY).getString(),
+    assertEquals(StorageClientUtils.toString(participantsNode.getProperty(SLING_RESOURCE_TYPE_PROPERTY)),
         SAKAI_EVENT_SIGNUP_PARTICIPANT_RT);
-    assertEquals(participantsNode.getProperty("sakai:user").getString(), userName);
+    assertEquals(StorageClientUtils.toString(participantsNode.getProperty("sakai:user")), "ieb");
   }
 
 }

@@ -25,14 +25,6 @@ import org.sakaiproject.nakamura.util.PersonalUtils;
 public interface PersonalConstants {
 
   /**
-   * The base location of the user space.
-   */
-  public static final String _USER = PersonalUtils.PATH_USER;
-  /**
-   * The base location of the group space.
-   */
-  public static final String _GROUP = PersonalUtils.PATH_GROUP;
-  /**
    * The name of the private folder
    */
   public static final String PRIVATE = PersonalUtils.PATH_PRIVATE;

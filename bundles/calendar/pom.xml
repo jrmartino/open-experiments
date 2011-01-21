@@ -153,6 +153,12 @@
       </exclusions>
     </dependency>
 
+    <dependency>
+      <groupId>com.google.collections</groupId>
+      <artifactId>google-collections</artifactId>
+      <version>0.8</version>
+    </dependency>
+
     <!--  Tests -->
     <dependency>
       <groupId>org.sakaiproject.nakamura</groupId>

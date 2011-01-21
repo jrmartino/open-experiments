@@ -17,22 +17,21 @@
  */
 package org.sakaiproject.nakamura.calendar.signup;
 
-import static org.sakaiproject.nakamura.api.calendar.CalendarConstants.SAKAI_EVENT_SIGNUP_PARTICIPANT_RT;
+import static org.sakaiproject.nakamura.api.calendar.CalendarConstants.PARTICIPANTS_NODE_NAME;
+
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Service;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.sakaiproject.nakamura.api.calendar.CalendarException;
 import org.sakaiproject.nakamura.api.calendar.signup.SignupPreProcessor;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.content.Content;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.jcr.Node;
-import javax.jcr.NodeIterator;
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
-import javax.jcr.query.Query;
-import javax.jcr.query.QueryManager;
-import javax.jcr.query.QueryResult;
 import javax.servlet.http.HttpServletResponse;
 
 /**
@@ -52,27 +51,20 @@ public class MaxParticipantsSignupPreProcessors implements SignupPreProcessor {
    * @see org.sakaiproject.nakamura.api.calendar.signup.SignupPreProcessor#checkSignup(org.apache.sling.api.SlingHttpServletRequest,
    *      javax.jcr.Node)
    */
-  public void checkSignup(SlingHttpServletRequest request, Node signupNode)
-      throws CalendarException {
+  public void checkSignup(SlingHttpServletRequest request, Content signupNode)
+  throws CalendarException {
+    // Get the number of maximum participants.
+    Session session = StorageClientUtils.adaptToSession(request.getResourceResolver()
+        .adaptTo(javax.jcr.Session.class));
+    if (signupNode.hasProperty(SAKAI_EVENT_MAX_PARTICIPANTS)) {
+      long maxParticipants = StorageClientUtils.toLong(signupNode
+          .getProperty(SAKAI_EVENT_MAX_PARTICIPANTS));
 
-    try {
-      // Get the number of maximum participants.
-      if (signupNode.hasProperty(SAKAI_EVENT_MAX_PARTICIPANTS)) {
-        long maxParticipants = signupNode.getProperty(SAKAI_EVENT_MAX_PARTICIPANTS)
-            .getLong();
-
-        // If a valid number is set, we check it.
-        // -1 or smaller means we don't.
-        if (maxParticipants > 0) {
-          checkParticipants(signupNode, maxParticipants);
-        }
+      // If a valid number is set, we check it.
+      // -1 or smaller means we don't.
+      if (maxParticipants > 0) {
+        checkParticipants(signupNode, maxParticipants, session);
       }
-    } catch (RepositoryException e) {
-      LOGGER
-          .error(
-              "Caugth a repository exception when checking for the maximum participants for an event signup.",
-              e);
-      throw new CalendarException(500, e.getMessage());
     }
 
   }
@@ -80,42 +72,40 @@ public class MaxParticipantsSignupPreProcessors implements SignupPreProcessor {
   /**
    * @param signupNode
    * @param maxParticipants
+   * @param session2
    * @throws CalendarException
    */
-  protected void checkParticipants(Node signupNode, long maxParticipants)
-      throws CalendarException {
+  protected void checkParticipants(Content signupNode, long maxParticipants,
+      Session session) throws CalendarException {
 
     // Check how many participants there are in this event.
     // We do this by doing a query for the participants.
     try {
-      Session session = signupNode.getSession();
-      QueryManager qm = session.getWorkspace().getQueryManager();
-      String query = "/jcr:root" + signupNode.getPath() + "//*[@sling:resourceType='"
-          + SAKAI_EVENT_SIGNUP_PARTICIPANT_RT + "']";
-      Query q = qm.createQuery(query, Query.XPATH);
-      QueryResult result = q.execute();
-      NodeIterator iterator = result.getNodes();
-
-      // If there is a massive number of participants, this will be rather slow.
-      long count = 0;
-      while (iterator.hasNext()) {
-        iterator.nextNode();
-        count++;
+      String path = signupNode.getPath() + "/" + PARTICIPANTS_NODE_NAME;
+      Content content = session.getContentManager().get(path);
+      if (content != null) {
+        long count = 0;
+        for (String p : content.listChildPaths()) {
+          count++;
+          if (count > maxParticipants) {
+            throw new CalendarException(HttpServletResponse.SC_BAD_REQUEST,
+                "This event has reached the maximum number of participants.");
+          }
+        }
       }
 
-      // If we have filled the available slots, we throw an exception that bubbles up to
-      // the signup servlet.
-      if (count > maxParticipants) {
-        throw new CalendarException(HttpServletResponse.SC_BAD_REQUEST,
-            "This event has reached the maximum number of participants.");
-      }
-
-    } catch (RepositoryException e) {
+    } catch (StorageClientException e) {
       LOGGER
           .error(
               "Caught a repository exception when trying to get the number of participants for a calendar event.",
               e);
       throw new CalendarException(500, e.getMessage());
+    } catch (AccessDeniedException e) {
+      LOGGER
+          .error(
+              "Caught a repository exception when trying to get the number of participants for a calendar event.",
+              e);
+      throw new CalendarException(403, e.getMessage());
     }
 
   }

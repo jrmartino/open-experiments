@@ -37,10 +37,10 @@ import org.sakaiproject.nakamura.api.doc.ServiceDocumentation;
 import org.sakaiproject.nakamura.api.doc.ServiceExtension;
 import org.sakaiproject.nakamura.api.doc.ServiceMethod;
 import org.sakaiproject.nakamura.api.doc.ServiceResponse;
+import org.sakaiproject.nakamura.api.lite.content.Content;
 
 import java.io.IOException;
 
-import javax.jcr.Node;
 import javax.servlet.ServletException;
 
 @ServiceDocumentation(
@@ -96,7 +96,7 @@ public class CalendarIcsServlet extends SlingSafeMethodsServlet {
     response.setContentType("text/calendar");
     response.setCharacterEncoding("UTF-8");
 
-    Node node = request.getResource().adaptTo(Node.class);
+    Content node = request.getResource().adaptTo(Content.class);
     try {
       String[] types = getSelectors(request);
       // Construct the Calendar from the node structure.

@@ -17,6 +17,8 @@
  */
 package org.sakaiproject.nakamura.util;
 
+import org.apache.jackrabbit.api.security.user.UserManager;
+import org.apache.sling.jcr.base.util.AccessControlUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,6 +82,12 @@ public class PersonalUtils {
         return PATH_HOME+au.getId();
       }
   }
+  
+  @Deprecated
+  private static String getUserHashedPath(String id) {
+    return PATH_HOME+id;
+  }
+
 
   public static String getPrimaryEmailAddress(Node profileNode)
       throws RepositoryException {
@@ -123,6 +131,7 @@ public class PersonalUtils {
   public static String getProfilePath(Authorizable au) {
     return getPublicPath(au) + "/" + PATH_AUTH_PROFILE;
   }
+  @Deprecated
   public static String getProfilePath(String au) {
     return getPublicPath(au) + "/" + PATH_AUTH_PROFILE;
   }
@@ -136,6 +145,7 @@ public class PersonalUtils {
     return getHomePath(au) + "/" + PATH_PRIVATE;
   }
 
+  @Deprecated
   public static String getPrivatePath(String au) {
     return getHomePath(au) + "/" + PATH_PRIVATE;
   }
@@ -149,6 +159,7 @@ public class PersonalUtils {
     return getHomePath(au) + "/" + PATH_PUBLIC;
   }
 
+  @Deprecated
   public static String getPublicPath(String au) {
     return getHomePath(au) + "/" + PATH_PUBLIC;
   }
@@ -167,6 +178,7 @@ public class PersonalUtils {
     }
     return null;
   }
+  @Deprecated
   public static String getHomePath(String userId) {
     if ( userId != null ) {
       return PATH_HOME+userId;
@@ -185,14 +197,38 @@ public class PersonalUtils {
   // TODO: review this as it hides the AccessDeniedException. I think this is dangerous ieb - 20110121
   public static Authorizable getAuthorizable(Session session, String id)
       throws StorageClientException {
-    Authorizable authorizable = null;
     try {
-      authorizable = session.getAuthorizableManager().findAuthorizable(id);
+      return session.getAuthorizableManager().findAuthorizable(id);
     } catch (AccessDeniedException e) {
       LOGGER.error("Access denied to the Authorizable object for ID: [" + id + "].");
       throw new StorageClientException(e.getMessage());
     }
-    return authorizable;
   }
+
+  @Deprecated
+  public static org.apache.jackrabbit.api.security.user.Authorizable getAuthorizable(
+      javax.jcr.Session session, String user) throws RepositoryException {
+      UserManager um = AccessControlUtil.getUserManager(session);
+      return um.getAuthorizable(user);
+  }
+
+  @Deprecated
+  public static String getHomePath(
+      org.apache.jackrabbit.api.security.user.Authorizable authorizable) throws RepositoryException {
+    return getHomePath(authorizable.getID());
+  }
+
+  @Deprecated
+  public static String getUserHashedPath(
+      org.apache.jackrabbit.api.security.user.Authorizable au) throws RepositoryException {
+    return getUserHashedPath(au.getID());
+  }
+
+  @Deprecated
+  public static String getProfilePath(
+      org.apache.jackrabbit.api.security.user.Authorizable au) throws RepositoryException {
+    return getProfilePath(au.getID());
+  }
+
 
 }

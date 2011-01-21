@@ -20,11 +20,12 @@ package org.sakaiproject.nakamura.api.calendar;
 import net.fortuna.ical4j.model.Calendar;
 import net.fortuna.ical4j.model.component.VEvent;
 
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.content.Content;
+
 import java.io.InputStream;
 import java.io.Reader;
 
-import javax.jcr.Node;
-import javax.jcr.Session;
 
 /**
  * A service that allows one to fetch and store calendars.
@@ -42,7 +43,7 @@ public interface CalendarService {
    * @throws CalendarException
    *           Failed to export a JCR representation to a valid Calendar representation.
    */
-  Calendar export(Node node) throws CalendarException;
+  Calendar export(Content contentNode) throws CalendarException;
 
   /**
    * Builds a {@link Calendar calendar} from a {@link Node node}. The node should have a
@@ -59,7 +60,7 @@ public interface CalendarService {
    * @throws CalendarException
    *           Failed to export a JCR representation to a valid Calendar representation.
    */
-  Calendar export(Node node, String[] types) throws CalendarException;
+  Calendar export(Content contentNode, String[] types) throws CalendarException;
 
   /**
    * Creates a JCR based representation of a {@link Calendar calendar}.
@@ -86,7 +87,7 @@ public interface CalendarService {
    * @throws CalendarException
    *           Something went wrong trying to create the JCR based representation.
    */
-  Node store(Calendar calendar, Session session, String path) throws CalendarException;
+  Content store(Calendar calendar, Session session, String path) throws CalendarException;
 
   /**
    * Creates a JCR based representation of a String containing valid iCalendar data.
@@ -111,7 +112,7 @@ public interface CalendarService {
    *           <code>
    * @return The top calendar {@link Node node}.
    */
-  Node store(String calendar, Session session, String path) throws CalendarException;
+  Content store(String calendar, Session session, String path) throws CalendarException;
 
   /**
    * Creates a JCR based representation from the specified {@link InputStream input
@@ -139,7 +140,7 @@ public interface CalendarService {
    * @throws CalendarException
    *           Something went wrong trying to create the JCR based representation.
    */
-  Node store(InputStream calendar, Session session, String path) throws CalendarException;
+  Content store(InputStream calendar, Session session, String path) throws CalendarException;
 
   /**
    * Creates a JCR based representation from the specified {@link Reader reader}.
@@ -166,6 +167,6 @@ public interface CalendarService {
    * @throws CalendarException
    *           Something went wrong trying to create the JCR based representation.
    */
-  Node store(Reader calendar, Session session, String path) throws CalendarException;
+  Content store(Reader calendar, Session session, String path) throws CalendarException;
 
 }

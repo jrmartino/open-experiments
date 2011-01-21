@@ -17,36 +17,45 @@
  */
 package org.sakaiproject.nakamura.calendar;
 
+
 import static org.apache.sling.jcr.resource.JcrResourceConstants.SLING_RESOURCE_TYPE_PROPERTY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 import static org.sakaiproject.nakamura.api.calendar.CalendarConstants.SAKAI_CALENDAR_RT;
-import static org.sakaiproject.nakamura.api.calendar.CalendarConstants.SIGNUP_NODE_NAME;
 import static org.sakaiproject.nakamura.api.calendar.CalendarConstants.SIGNUP_NODE_RT;
+
+import com.google.common.collect.ImmutableMap;
 
 import net.fortuna.ical4j.model.PropertyList;
 import net.fortuna.ical4j.model.component.VEvent;
-import net.fortuna.ical4j.model.property.DtStart;
 import net.fortuna.ical4j.model.property.Uid;
 
 import org.apache.sling.commons.testing.jcr.MockNode;
 import org.junit.Before;
 import org.junit.Test;
 import org.sakaiproject.nakamura.api.calendar.CalendarException;
+import org.sakaiproject.nakamura.api.lite.ClientPoolException;
+import org.sakaiproject.nakamura.api.lite.Session;
+import org.sakaiproject.nakamura.api.lite.StorageClientException;
+import org.sakaiproject.nakamura.api.lite.StorageClientUtils;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AccessDeniedException;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AclModification;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.AclModification.Operation;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.Permissions;
+import org.sakaiproject.nakamura.api.lite.accesscontrol.Security;
+import org.sakaiproject.nakamura.api.lite.content.Content;
+import org.sakaiproject.nakamura.lite.BaseMemoryRepository;
+import org.sakaiproject.nakamura.lite.RepositoryImpl;
 import org.sakaiproject.nakamura.util.IOUtils;
 
 import java.io.FileReader;
 import java.io.InputStream;
 import java.io.Reader;
-import java.text.ParseException;
 
-import javax.jcr.Node;
 import javax.jcr.RepositoryException;
-import javax.jcr.Session;
 import javax.jcr.ValueFormatException;
+
 
 /**
  *
@@ -57,11 +66,32 @@ public class CalendarServiceImplTest {
   private MockNode calendarNode;
   private CalendarSubPathProducer producer;
   private Uid uid;
-  private Node eventNode;
-  private Node signupNode;
+  private Content eventNode;
+  private Content signupNode;
+  private Session session;
+  private BaseMemoryRepository baseMemoryRepository;
+  private RepositoryImpl sparseRepository;
+  
+  public CalendarServiceImplTest() throws ClientPoolException, StorageClientException, AccessDeniedException, ClassNotFoundException {
+    baseMemoryRepository = new BaseMemoryRepository();
+    sparseRepository = baseMemoryRepository.getRepository();
+    session = sparseRepository.loginAdministrative();
+    session.getAuthorizableManager().createUser("ieb", "Ian Boston", "test",
+        ImmutableMap.of("x", StorageClientUtils.toStore("y")));
+    session.getContentManager().update(
+        new Content("a:ieb", null));
+    session.getAccessControlManager().setAcl(
+        Security.ZONE_CONTENT,
+        "a:ieb",
+        new AclModification[] { new AclModification(AclModification.grantKey("ieb"),
+            Permissions.CAN_MANAGE.getPermission(), Operation.OP_REPLACE) });
+    session.logout();
+    session = sparseRepository.loginAdministrative("ieb");
+  }
 
   @Before
-  public void setUp() {
+  public void setUp() throws ClientPoolException, StorageClientException, AccessDeniedException, ClassNotFoundException {
+    
     service = new CalendarServiceImpl();
     uid = new Uid("DD45F1DB-34ED-4BBE-A2B2-970E0668F7BC");
     PropertyList pList = new PropertyList();
@@ -73,8 +103,7 @@ public class CalendarServiceImplTest {
   public void testStoringCalendarInputStream() throws Exception {
     InputStream in = getClass().getClassLoader().getResourceAsStream("home.ics");
     // Do mocking
-    String path = "/path/to/store/calendar";
-    Session session = mockSession(path);
+    String path = "a:ieb/path/to/store/calendar";
     // Store nodes
     service.store(in, session, path);
     // Verify if everything is correct.
@@ -86,8 +115,7 @@ public class CalendarServiceImplTest {
     InputStream in = getClass().getClassLoader().getResourceAsStream("home.ics");
     String calendar = IOUtils.readFully(in, "UTF-8");
     // Do mocking
-    String path = "/path/to/store/calendar";
-    Session session = mockSession(path);
+    String path = "a:ieb/path/to/store/calendar";
     // Store nodes
     service.store(calendar, session, path);
     // Verify if everything is correct.
@@ -99,8 +127,7 @@ public class CalendarServiceImplTest {
     String fileName = getClass().getClassLoader().getResource("home.ics").getFile();
     Reader r = new FileReader(fileName);
     // Do mocking
-    String path = "/path/to/store/calendar";
-    Session session = mockSession(path);
+    String path = "a:ieb/path/to/store/calendar";
     // Store nodes
     service.store(r, session, path);
     // Verify if everything is correct.
@@ -123,50 +150,9 @@ public class CalendarServiceImplTest {
    * 
    */
   private void verifyMocks() throws Exception {
-    assertEquals(calendarNode.getProperty(SLING_RESOURCE_TYPE_PROPERTY).getString(),
-        SAKAI_CALENDAR_RT);
-
-    // Verify if all the calendar stuff is correct.
-    assertEquals(calendarNode.getProperty(SLING_RESOURCE_TYPE_PROPERTY).getString(),
-        SAKAI_CALENDAR_RT);
-    assertEquals(calendarNode.getProperty("X-WR-CALNAME").getString(), "Home");
-
-    // Event node
-    verify(eventNode).setProperty(SLING_RESOURCE_TYPE_PROPERTY, "sakai/calendar-vevent");
-    verify(eventNode).setProperty("sakai:vcal-UID", uid.getValue());
-    verify(eventNode).setProperty("sakai:vcal-SUMMARY", "Foobar");
-
-    // signup node
-    verify(signupNode).setProperty(SLING_RESOURCE_TYPE_PROPERTY, SIGNUP_NODE_RT);
+    // TODO: Verify all is correct.
 
   }
 
-  /**
-   * @param path
-   * @return
-   * @throws RepositoryException
-   * @throws ParseException
-   */
-  private Session mockSession(String path) throws Exception {
-    Session session = mock(Session.class);
-
-    // The top calendar node
-    calendarNode = new MockNode(path);
-    when(session.itemExists(path)).thenReturn(true);
-    when(session.getItem(path)).thenReturn(calendarNode);
-
-    // The event node
-    DtStart start = new DtStart("20100427T130000");
-    String eventPath = path + producer.getDateHashed(start) + "-" + uid.getValue();
-    System.err.println(eventPath);
-    eventNode = mock(Node.class);
-    signupNode = mock(Node.class);
-    when(session.itemExists(eventPath)).thenReturn(true);
-    when(session.getItem(eventPath)).thenReturn(eventNode);
-    when(eventNode.addNode(SIGNUP_NODE_NAME)).thenReturn(signupNode);
-
-    calendarNode.setSession(session);
-    return session;
-  }
 
 }
